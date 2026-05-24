@@ -1,0 +1,214 @@
+* {
+  font-family: 'Montserrat', sans-serif;
+  box-sizing: border-box;
+}
+
+/* === Background - однотонный === */
+.gradient-bg {
+  background: #0f172a;
+}
+
+.card-gradient {
+  background: rgba(20, 35, 60, 0.85);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* === Footer тёмный блок === */
+.footer-dark {
+  background: #080e1a;
+}
+
+/* === Effects === */
+.glow {
+  box-shadow: 0 0 30px rgba(56, 189, 248, 0.3);
+}
+
+/* === Destination Cards === */
+.destination-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(56, 189, 248, 0.2);
+}
+
+/* === Animations === */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+.float-animation { animation: float 3s ease-in-out infinite; }
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* === Navigation tabs === */
+.tab-active {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: white;
+}
+
+/* === Toast === */
+#toast { transition: transform 0.3s ease, opacity 0.3s ease; }
+
+/* === Kaspi QR modal === */
+.kaspi-qr-wrap {
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  display: inline-block;
+}
+
+@keyframes kaspi-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 0, 0.4); }
+  50%       { box-shadow: 0 0 0 12px rgba(255, 90, 0, 0); }
+}
+.kaspi-pulse { animation: kaspi-pulse 1.5s ease-in-out infinite; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.kaspi-spin { animation: spin 1s linear infinite; }
+
+/* === Status badges === */
+.badge-paid    { background: rgba(16,185,129,0.2); color: #34d399; }
+.badge-pending { background: rgba(251,191,36,0.2); color: #fbbf24; }
+.badge-expired { background: rgba(239,68,68,0.2);  color: #f87171; }
+
+/* === City modal === */
+#city-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.3) transparent;
+}
+#city-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#city-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.3); border-radius: 9px; }
+
+.star-btn { background: none; border: none; cursor: pointer; padding: 0 2px; }
+
+
+/* === Modal polish === */
+#feed-detail-modal .card-gradient,
+#detail-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#feed-detail-modal .card-gradient::-webkit-scrollbar,
+#detail-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#feed-detail-modal .card-gradient::-webkit-scrollbar-thumb,
+#detail-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+
+/* === Search autocomplete === */
+.autocomplete-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: 245px;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+  backdrop-filter: blur(12px);
+}
+.autocomplete-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  text-align: left;
+  color: #e5eefb;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.autocomplete-option:hover,
+.autocomplete-option.active {
+  background: rgba(56, 189, 248, 0.16);
+  color: white;
+}
+.autocomplete-option small { color: #94a3b8; }
+
+#booking-modal .card-gradient,
+#city-modal .card-gradient,
+#feed-detail-modal .card-gradient,
+#detail-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#booking-modal .card-gradient::-webkit-scrollbar,
+#city-modal .card-gradient::-webkit-scrollbar,
+#feed-detail-modal .card-gradient::-webkit-scrollbar,
+#detail-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#booking-modal .card-gradient::-webkit-scrollbar-thumb,
+#city-modal .card-gradient::-webkit-scrollbar-thumb,
+#feed-detail-modal .card-gradient::-webkit-scrollbar-thumb,
+#detail-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+#city-selector-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#city-selector-list::-webkit-scrollbar { width: 5px; }
+#city-selector-list::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+
+#place-detail-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#place-detail-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#place-detail-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+.place-city-hero {
+  position: relative;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+}
+.place-city-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8,14,26,0.15) 0%, rgba(8,14,26,0.35) 55%, rgba(8,14,26,0.8) 100%);
+}
+.place-city-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+.places-pills {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.places-pills::-webkit-scrollbar {
+  display: none;
+}
+
+#auth-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#auth-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#auth-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+/* Native select dropdowns, because default gray rectangles are apparently a lifestyle choice. */
+select option {
+  background: #14233c;
+  color: #f8fafc;
+}
+select:focus {
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.16);
+}
+.profile-hint-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}

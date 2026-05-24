@@ -1,0 +1,19 @@
+<!-- ===== PLACES ===== -->
+  <section id="places-section" class="px-6 py-12 hidden">
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-2xl md:text-3xl font-bold mb-2 text-center">🗺️ Интересные места</h2>
+      <p class="text-slate-400 text-center mb-8">Достопримечательности и очень красивые места по выбранному городу</p>
+
+      <div class="card-gradient rounded-2xl p-5 mb-6">
+        <label class="block text-xs text-slate-400 mb-2">Город</label>
+        <div class="relative">
+          <input id="places-search" type="text" placeholder="Начните писать город..." autocomplete="off"
+            class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none">
+          <div id="places-suggestions" class="autocomplete-list hidden"></div>
+        </div>
+        <div id="places-city-pills" class="places-pills flex gap-2 overflow-x-auto pt-4 pb-1"></div>
+      </div>
+
+      <div id="places-content"></div>
+    </div>
+  </section>
