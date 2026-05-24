@@ -5,6 +5,17 @@
 const SECTIONS = ['explore', 'feed', 'flights', 'hotels', 'places', 'bookings'];
 let travelplanNavSilent = false;
 
+function getInitialTravelPlanSection() {
+  const fromHash = window.location.hash.replace('#', '');
+  if (SECTIONS.includes(fromHash)) return fromHash;
+  try {
+    const saved = localStorage.getItem('travelplan_current_section');
+    if (SECTIONS.includes(saved)) return saved;
+  } catch {}
+  return 'explore';
+}
+window.getInitialTravelPlanSection = getInitialTravelPlanSection;
+
 function showSection(section, options = {}) {
   if (!SECTIONS.includes(section)) section = 'explore';
   try { localStorage.setItem('travelplan_current_section', section); } catch {}
@@ -13,7 +24,8 @@ function showSection(section, options = {}) {
     const url = new URL(window.location.href);
     url.hash = section === 'explore' ? '' : section;
     const state = { section };
-    if (history.state?.section !== section) history.pushState(state, '', url);
+    if (options.replace) history.replaceState(state, '', url);
+    else if (history.state?.section !== section) history.pushState(state, '', url);
   }
 
   const explorePage = document.getElementById('explore-page');
@@ -50,9 +62,7 @@ window.addEventListener('popstate', (event) => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  const fromHash = window.location.hash.replace('#', '');
-  const saved = localStorage.getItem('travelplan_current_section');
-  const section = SECTIONS.includes(fromHash) ? fromHash : (SECTIONS.includes(saved) ? saved : 'explore');
+  const section = getInitialTravelPlanSection();
   history.replaceState({ section }, '', section === 'explore' ? window.location.pathname : `#${section}`);
 });
 
