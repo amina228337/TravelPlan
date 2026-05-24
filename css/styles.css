@@ -212,3 +212,14 @@ select:focus {
   align-items: center;
   gap: 0.35rem;
 }
+
+
+/* Не показываем старое состояние до восстановления Supabase-сессии */
+body.auth-booting #app {
+  opacity: 0;
+  pointer-events: none;
+}
+body:not(.auth-booting) #app {
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
