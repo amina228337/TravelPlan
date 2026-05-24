@@ -183,24 +183,32 @@ function initAutocomplete() {
 }
 
 async function initApp() {
-  initElementSdk();
-  // Сначала восстанавливаем Supabase-сессию, потом грузим брони.
-  // Иначе после reload сайт считает пользователя гостем и показывает локальные фантомы.
-  if (window.travelplanAuthReady) await window.travelplanAuthReady;
-  else if (typeof refreshAuthState === 'function') await refreshAuthState({ skipBookings: true });
-  await initDataSdk();
-  setupForms();
-  setupDateConstraints();
-  initAutocomplete();
-  renderTop3Destinations();
-  if (typeof renderPersonalSection === 'function') renderPersonalSection();
-  initCitySelector();
-  initCitySelectorModal();
-  // Автозаполнение поля «Откуда» при загрузке
-  const flightFrom = document.getElementById('flight-from');
-  if (flightFrom && !flightFrom.value) flightFrom.value = getUserCity().name;
-  const savedSection = localStorage.getItem('travelplan_current_section');
-  if (savedSection && ['explore', 'feed', 'flights', 'hotels', 'places', 'bookings'].includes(savedSection)) showSection(savedSection);
+  try {
+    initElementSdk();
+    // Сначала восстанавливаем Supabase-сессию, потом грузим брони.
+    // Иначе после reload сайт считает пользователя гостем и показывает локальные фантомы.
+    if (window.travelplanAuthReady) await window.travelplanAuthReady;
+    else if (typeof refreshAuthState === 'function') await refreshAuthState({ skipBookings: true });
+    await initDataSdk();
+    setupForms();
+    setupDateConstraints();
+    initAutocomplete();
+    renderTop3Destinations();
+    if (typeof renderPersonalSection === 'function') renderPersonalSection();
+    initCitySelector();
+    initCitySelectorModal();
+    // Автозаполнение поля «Откуда» при загрузке
+    const flightFrom = document.getElementById('flight-from');
+    if (flightFrom && !flightFrom.value) flightFrom.value = getUserCity().name;
+    const initialSection = typeof getInitialTravelPlanSection === 'function'
+      ? getInitialTravelPlanSection()
+      : (localStorage.getItem('travelplan_current_section') || 'explore');
+    showSection(initialSection, { replace: true });
+  } catch (error) {
+    console.error('Ошибка запуска TravelPlan:', error);
+  } finally {
+    document.body.classList.remove('auth-booting');
+  }
 }
 
 initApp();
