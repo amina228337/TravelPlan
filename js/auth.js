@@ -5,6 +5,7 @@
 window.travelplanCurrentUser = null;
 window.travelplanUserProfile = null;
 let authMode = 'login';
+let pendingAuthNotice = '';
 
 let travelplanAuthReadyResolve;
 window.travelplanAuthReady = new Promise(resolve => { travelplanAuthReadyResolve = resolve; });
@@ -52,6 +53,7 @@ function closeAuthModal() {
 
 function setAuthMode(mode) {
   authMode = mode;
+  pendingAuthNotice = '';
   renderAuthModal();
 }
 
@@ -79,6 +81,7 @@ function renderLoginRegister(root) {
         <button onclick="setAuthMode('login')" class="py-2 rounded-lg text-sm font-semibold ${isLogin ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'}">Вход</button>
         <button onclick="setAuthMode('register')" class="py-2 rounded-lg text-sm font-semibold ${!isLogin ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'}">Регистрация</button>
       </div>
+      ${pendingAuthNotice ? `<div class="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">${pendingAuthNotice}</div>` : ''}
       <div class="space-y-3">
         ${!isLogin ? `<input id="auth-name" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Имя или ник">` : ''}
         <input id="auth-email" type="email" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Email">
@@ -180,12 +183,12 @@ function renderProfileForm(root) {
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Имя пользователя до 12 символов</label>
+          <label class="block text-xs text-slate-400 mb-1">Имя пользователя · до 12 символов · раз в 6 часов</label>
           <input id="profile-display-name" maxlength="12" value="${profile.display_name || name}" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none">
           ${nameGate.ok ? '<p class="text-xs text-slate-500 mt-1">Имя можно менять раз в 6 часов.</p>' : `<p class="text-xs text-amber-300 mt-1">Имя можно будет сменить через ${nameGate.waitText}</p>`}
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Ник до 8 символов</label>
+          <label class="block text-xs text-slate-400 mb-1">Ник · до 8 символов · раз в 48 часов</label>
           <input id="profile-nickname" maxlength="8" value="${profile.nickname || name}" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none">
           ${nickGate.ok ? '<p class="text-xs text-slate-500 mt-1">Ник можно менять раз в 48 часов.</p>' : `<p class="text-xs text-amber-300 mt-1">Ник можно будет сменить через ${nickGate.waitText}</p>`}
         </div>
@@ -210,9 +213,9 @@ function renderProfileForm(root) {
           </select>
         </div>
         <div class="md:col-span-2">
-          <label class="block text-xs text-slate-400 mb-1">Аватарка · менять можно раз в 12 часов</label>
+          <label class="block text-xs text-slate-400 mb-1">Аватарка с устройства · менять можно раз в 12 часов</label>
           <input id="profile-avatar-file" type="file" accept="image/*" ${avatarGate.ok ? '' : 'disabled'} class="w-full text-sm text-slate-300 file:mr-3 file:px-4 file:py-3 file:rounded-xl file:border-0 file:bg-sky-500/20 file:text-sky-200 hover:file:bg-sky-500/30 disabled:opacity-50">
-          ${avatarGate.ok ? '<p class="text-xs text-slate-500 mt-1">JPG/PNG/WebP</p>' : `<p class="text-xs text-amber-300 mt-1">Следующая смена аватарки через ${avatarGate.waitText}</p>`}
+          ${avatarGate.ok ? '<p class="text-xs text-slate-500 mt-1">JPG/PNG/WebP. Для демо хранится как data URL в профиле.</p>' : `<p class="text-xs text-amber-300 mt-1">Следующая смена аватарки через ${avatarGate.waitText}</p>`}
         </div>
       </div>
 
@@ -254,8 +257,42 @@ async function loginWithEmail() {
   const email = document.getElementById('auth-email')?.value.trim();
   const password = document.getElementById('auth-password')?.value;
   if (!email || !password) return showToast('Введите email и пароль', 'error');
+
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) return showToast(error.message, 'error');
+
+  if (error) {
+    const message = String(error.message || '').toLowerCase();
+
+    if (message.includes('email not confirmed') || message.includes('confirm')) {
+      pendingAuthNotice = 'Email ещё не подтверждён. Проверьте почту или отключите подтверждение email в Supabase для демо.';
+      showToast('Email ещё не подтверждён', 'error');
+      renderAuthModal();
+      setTimeout(() => {
+        const emailInput = document.getElementById('auth-email');
+        if (emailInput) emailInput.value = email;
+      }, 0);
+      return;
+    }
+
+    // Вход больше НИКОГДА не создаёт аккаунт.
+    // Если Supabase возвращает Invalid login credentials, показываем понятную ошибку
+    // и сразу перекидываем пользователя на вкладку регистрации.
+    pendingAuthNotice = 'Такого аккаунта нет или пароль неверный. Зарегистрируйтесь через форму ниже.';
+    authMode = 'register';
+    renderAuthModal();
+    setTimeout(() => {
+      const emailInput = document.getElementById('auth-email');
+      if (emailInput) emailInput.value = email;
+      const passwordInput = document.getElementById('auth-password');
+      if (passwordInput) passwordInput.value = '';
+      const nameInput = document.getElementById('auth-name');
+      if (nameInput) nameInput.focus();
+    }, 0);
+    showToast('Такого аккаунта нет. Перехожу к регистрации.', 'error');
+    return;
+  }
+
+  pendingAuthNotice = '';
   showToast('Вы вошли в аккаунт');
   await refreshAuthState();
   renderAuthModal();
