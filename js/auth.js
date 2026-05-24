@@ -5,7 +5,6 @@
 window.travelplanCurrentUser = null;
 window.travelplanUserProfile = null;
 let authMode = 'login';
-let pendingAuthNotice = '';
 
 let travelplanAuthReadyResolve;
 window.travelplanAuthReady = new Promise(resolve => { travelplanAuthReadyResolve = resolve; });
@@ -53,7 +52,6 @@ function closeAuthModal() {
 
 function setAuthMode(mode) {
   authMode = mode;
-  pendingAuthNotice = '';
   renderAuthModal();
 }
 
@@ -81,7 +79,6 @@ function renderLoginRegister(root) {
         <button onclick="setAuthMode('login')" class="py-2 rounded-lg text-sm font-semibold ${isLogin ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'}">Вход</button>
         <button onclick="setAuthMode('register')" class="py-2 rounded-lg text-sm font-semibold ${!isLogin ? 'bg-sky-500 text-white' : 'text-slate-400 hover:text-white'}">Регистрация</button>
       </div>
-      ${pendingAuthNotice ? `<div class="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">${pendingAuthNotice}</div>` : ''}
       <div class="space-y-3">
         ${!isLogin ? `<input id="auth-name" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Имя или ник">` : ''}
         <input id="auth-email" type="email" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Email">
@@ -91,6 +88,27 @@ function renderLoginRegister(root) {
       </div>
       <p class="text-xs text-slate-500 text-center">Если включено подтверждение email, после регистрации Supabase попросит открыть письмо. Потому что даже сайт путешествий обязан заниматься бюрократией.</p>
     </div>`;
+}
+
+function switchLoginToRegister(email = '') {
+  authMode = 'register';
+  renderAuthModal();
+  setTimeout(() => {
+    const emailInput = document.getElementById('auth-email');
+    const passInput = document.getElementById('auth-password');
+    if (emailInput && email) emailInput.value = email;
+    if (passInput) passInput.value = '';
+    const nameInput = document.getElementById('auth-name');
+    if (nameInput) nameInput.focus();
+  }, 0);
+}
+
+function isLoginAccountMissingError(error) {
+  const msg = String(error?.message || '').toLowerCase();
+  return msg.includes('invalid login credentials')
+    || msg.includes('invalid credentials')
+    || msg.includes('user not found')
+    || msg.includes('email not confirmed') === false && msg.includes('invalid');
 }
 
 function getProfileCountryOptions(selectedCountry) {
@@ -183,12 +201,12 @@ function renderProfileForm(root) {
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Имя пользователя · до 12 символов · раз в 6 часов</label>
+          <label class="block text-xs text-slate-400 mb-1">Имя пользователя до 12 символов</label>
           <input id="profile-display-name" maxlength="12" value="${profile.display_name || name}" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none">
           ${nameGate.ok ? '<p class="text-xs text-slate-500 mt-1">Имя можно менять раз в 6 часов.</p>' : `<p class="text-xs text-amber-300 mt-1">Имя можно будет сменить через ${nameGate.waitText}</p>`}
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Ник · до 8 символов · раз в 48 часов</label>
+          <label class="block text-xs text-slate-400 mb-1">Ник до 8 символов</label>
           <input id="profile-nickname" maxlength="8" value="${profile.nickname || name}" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none">
           ${nickGate.ok ? '<p class="text-xs text-slate-500 mt-1">Ник можно менять раз в 48 часов.</p>' : `<p class="text-xs text-amber-300 mt-1">Ник можно будет сменить через ${nickGate.waitText}</p>`}
         </div>
@@ -213,9 +231,9 @@ function renderProfileForm(root) {
           </select>
         </div>
         <div class="md:col-span-2">
-          <label class="block text-xs text-slate-400 mb-1">Аватарка с устройства · менять можно раз в 12 часов</label>
+          <label class="block text-xs text-slate-400 mb-1">Аватарка · менять можно раз в 12 часов</label>
           <input id="profile-avatar-file" type="file" accept="image/*" ${avatarGate.ok ? '' : 'disabled'} class="w-full text-sm text-slate-300 file:mr-3 file:px-4 file:py-3 file:rounded-xl file:border-0 file:bg-sky-500/20 file:text-sky-200 hover:file:bg-sky-500/30 disabled:opacity-50">
-          ${avatarGate.ok ? '<p class="text-xs text-slate-500 mt-1">JPG/PNG/WebP. Для демо хранится как data URL в профиле.</p>' : `<p class="text-xs text-amber-300 mt-1">Следующая смена аватарки через ${avatarGate.waitText}</p>`}
+          ${avatarGate.ok ? '<p class="text-xs text-slate-500 mt-1">JPG/PNG/WebP</p>' : `<p class="text-xs text-amber-300 mt-1">Следующая смена аватарки через ${avatarGate.waitText}</p>`}
         </div>
       </div>
 
@@ -261,40 +279,18 @@ async function loginWithEmail() {
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
   if (error) {
-    const message = String(error.message || '').toLowerCase();
-
-    if (message.includes('email not confirmed') || message.includes('confirm')) {
-      pendingAuthNotice = 'Email ещё не подтверждён. Проверьте почту или отключите подтверждение email в Supabase для демо.';
-      showToast('Email ещё не подтверждён', 'error');
-      renderAuthModal();
-      setTimeout(() => {
-        const emailInput = document.getElementById('auth-email');
-        if (emailInput) emailInput.value = email;
-      }, 0);
+    const msg = String(error.message || '').toLowerCase();
+    if (msg.includes('email not confirmed')) {
+      showToast('Аккаунт есть, но email ещё не подтверждён', 'error');
       return;
     }
-
-    // Вход больше НИКОГДА не создаёт аккаунт.
-    // Если Supabase возвращает Invalid login credentials, показываем понятную ошибку
-    // и сразу перекидываем пользователя на вкладку регистрации.
-    pendingAuthNotice = 'Такого аккаунта нет или пароль неверный. Зарегистрируйтесь через форму ниже.';
-    authMode = 'register';
-    renderAuthModal();
-    setTimeout(() => {
-      const emailInput = document.getElementById('auth-email');
-      if (emailInput) emailInput.value = email;
-      const passwordInput = document.getElementById('auth-password');
-      if (passwordInput) passwordInput.value = '';
-      const nameInput = document.getElementById('auth-name');
-      if (nameInput) nameInput.focus();
-    }, 0);
-    showToast('Такого аккаунта нет. Перехожу к регистрации.', 'error');
+    showToast('Такого аккаунта нет или пароль неверный. Перехожу к регистрации.', 'error');
+    switchLoginToRegister(email);
     return;
   }
 
-  pendingAuthNotice = '';
   showToast('Вы вошли в аккаунт');
-  await refreshAuthState();
+  await refreshAuthState({ skipBookings: false });
   renderAuthModal();
 }
 
@@ -316,15 +312,28 @@ async function logoutAccount(event) {
     btn.textContent = 'Выходим...';
   }
 
+  window.travelplanSuppressAuthEvents = true;
+
+  // Сначала меняем интерфейс, потом ждём Supabase. Так выход ощущается мгновенным,
+  // а не как просьба браузеру подумать о вечном.
+  window.travelplanCurrentUser = null;
+  window.travelplanUserProfile = null;
+  authMode = 'login';
+
+  try { updateAuthUI(); } catch {}
+  try {
+    if (typeof clearBookingsForGuest === 'function') clearBookingsForGuest();
+    else if (typeof renderBookings === 'function') { window.bookings = []; renderBookings([]); }
+  } catch {}
+
   try {
     if (window.supabaseClient?.auth) {
-      await window.supabaseClient.auth.signOut();
+      await window.supabaseClient.auth.signOut({ scope: 'local' });
     }
   } catch (error) {
     console.warn('Supabase signOut не ответил, чистим локально:', error?.message || error);
   }
 
-  // Полностью убираем локальные следы сессии, но не трогаем настройки сайта и город.
   try {
     const keysToRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -345,17 +354,10 @@ async function logoutAccount(event) {
     });
   } catch {}
 
-  window.travelplanCurrentUser = null;
-  window.travelplanUserProfile = null;
-  authMode = 'login';
-
-  try { updateAuthUI(); } catch {}
+  window.travelplanSuppressAuthEvents = false;
   try { closeAuthModal(); } catch {}
-  try {
-    if (typeof clearBookingsForGuest === 'function') clearBookingsForGuest();
-    else if (typeof renderBookings === 'function') { window.bookings = []; renderBookings([]); }
-  } catch {}
-
+  try { updateAuthUI(); } catch {}
+  try { renderLoginRegister(document.getElementById('auth-modal-content')); } catch {}
   showToast('Вы вышли из аккаунта');
   return false;
 }
@@ -484,6 +486,7 @@ async function initAuth() {
   if (window.supabaseClient && !window.travelplanAuthSubscriptionSet) {
     window.travelplanAuthSubscriptionSet = true;
     supabaseClient.auth.onAuthStateChange(async () => {
+      if (window.travelplanSuppressAuthEvents) return;
       await refreshAuthState({ skipBookings: false });
       renderAuthModal();
     });
