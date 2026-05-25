@@ -1,0 +1,868 @@
+/*
+  Зачем этот файл:
+  Основные стили TravelPlan: фон, карточки, модалки, скроллы и мелкие UI-эффекты.
+  Комментарии написаны простым языком, чтобы было понятно, какой блок за что отвечает,
+  а не как будто CSS составляли древние жрецы margin-left.
+*/
+
+* {
+  font-family: 'Montserrat', sans-serif;
+  box-sizing: border-box;
+}
+
+/* === Background - однотонный === */
+.gradient-bg {
+  background: #0f172a;
+}
+
+.card-gradient {
+  background: rgba(20, 35, 60, 0.85);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* === Footer тёмный блок === */
+.footer-dark {
+  background: #080e1a;
+}
+
+/* === Effects === */
+.glow {
+  box-shadow: 0 0 30px rgba(56, 189, 248, 0.3);
+}
+
+/* === Destination Cards === */
+.destination-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(56, 189, 248, 0.2);
+}
+
+/* === Animations === */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-10px); }
+}
+.float-animation { animation: float 3s ease-in-out infinite; }
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* === Navigation tabs === */
+.tab-active {
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: white;
+}
+
+/* === Toast === */
+#toast { transition: transform 0.3s ease, opacity 0.3s ease; }
+
+/* === Kaspi QR modal === */
+.kaspi-qr-wrap {
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  display: inline-block;
+}
+
+@keyframes kaspi-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 0, 0.4); }
+  50%       { box-shadow: 0 0 0 12px rgba(255, 90, 0, 0); }
+}
+.kaspi-pulse { animation: kaspi-pulse 1.5s ease-in-out infinite; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.kaspi-spin { animation: spin 1s linear infinite; }
+
+/* === Status badges === */
+.badge-paid    { background: rgba(16,185,129,0.2); color: #34d399; }
+.badge-pending { background: rgba(251,191,36,0.2); color: #fbbf24; }
+.badge-expired { background: rgba(239,68,68,0.2);  color: #f87171; }
+
+/* === City modal === */
+#city-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.3) transparent;
+}
+#city-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#city-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.3); border-radius: 9px; }
+
+.star-btn { background: none; border: none; cursor: pointer; padding: 0 2px; }
+
+
+/* === Modal polish === */
+#feed-detail-modal .card-gradient,
+#detail-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#feed-detail-modal .card-gradient::-webkit-scrollbar,
+#detail-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#feed-detail-modal .card-gradient::-webkit-scrollbar-thumb,
+#detail-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+
+/* === Search autocomplete === */
+.autocomplete-list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  max-height: 245px;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+  backdrop-filter: blur(12px);
+}
+.autocomplete-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  text-align: left;
+  color: #e5eefb;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.autocomplete-option:hover,
+.autocomplete-option.active {
+  background: rgba(56, 189, 248, 0.16);
+  color: white;
+}
+.autocomplete-option small { color: #94a3b8; }
+
+#booking-modal .card-gradient,
+#city-modal .card-gradient,
+#feed-detail-modal .card-gradient,
+#detail-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#booking-modal .card-gradient::-webkit-scrollbar,
+#city-modal .card-gradient::-webkit-scrollbar,
+#feed-detail-modal .card-gradient::-webkit-scrollbar,
+#detail-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#booking-modal .card-gradient::-webkit-scrollbar-thumb,
+#city-modal .card-gradient::-webkit-scrollbar-thumb,
+#feed-detail-modal .card-gradient::-webkit-scrollbar-thumb,
+#detail-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+#city-selector-list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#city-selector-list::-webkit-scrollbar { width: 5px; }
+#city-selector-list::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+
+#place-detail-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#place-detail-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#place-detail-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+.place-city-hero {
+  position: relative;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+}
+.place-city-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(8,14,26,0.15) 0%, rgba(8,14,26,0.35) 55%, rgba(8,14,26,0.8) 100%);
+}
+.place-city-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+.places-pills {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.places-pills::-webkit-scrollbar {
+  display: none;
+}
+
+#auth-modal .card-gradient {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56,189,248,0.35) transparent;
+}
+#auth-modal .card-gradient::-webkit-scrollbar { width: 5px; }
+#auth-modal .card-gradient::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.35); border-radius: 9px; }
+
+/* Native select dropdowns, because default gray rectangles are apparently a lifestyle choice. */
+select option {
+  background: #14233c;
+  color: #f8fafc;
+}
+select:focus {
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.16);
+}
+.profile-hint-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+
+/* Не показываем старое состояние до восстановления Supabase-сессии */
+body.auth-booting #app {
+  opacity: 0;
+  pointer-events: none;
+}
+body:not(.auth-booting) #app {
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+
+/* === Lazy-load fade-in для картинок === */
+img[loading="lazy"] {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+img[loading="lazy"].loaded,
+img[loading="lazy"]:not([src=""]) {
+  opacity: 1;
+}
+
+/* === Booking card image === */
+.booking-card-img {
+  transition: transform 0.4s ease;
+}
+.booking-card-img:hover {
+  transform: scale(1.03);
+}
+
+
+/* === Большая кнопка оплаты ===
+   На телефоне маленькая кнопка оплаты выглядит как проверка на меткость пальца.
+   Поэтому делаем ее заметной, высокой и с нормальной зоной нажатия. */
+.booking-pay-btn {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  letter-spacing: 0.01em;
+}
+.booking-pay-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+.booking-pay-btn:active {
+  transform: translateY(0);
+}
+
+/* === Mobile polish ===
+   Тут не отдельная мобильная версия, а аккуратная адаптация текущего сайта.
+   Цель простая: крупные кнопки, нормальные отступы, без горизонтального скролла
+   и без ощущения, что десктопную страницу насильно засунули в телефон. */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+button, a, input, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 768px) {
+  body {
+    font-size: 15px;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 45;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(14px);
+    padding: 0.75rem 1rem !important;
+  }
+
+  #site-title {
+    font-size: 1.05rem;
+  }
+
+  #mobile-menu {
+    position: sticky;
+    top: 65px;
+    z-index: 44;
+    max-height: calc(100vh - 65px);
+    overflow-y: auto;
+    background: rgba(15, 23, 42, 0.98) !important;
+    backdrop-filter: blur(14px);
+  }
+
+  #mobile-menu button {
+    min-height: 44px;
+    border-radius: 14px;
+    padding-left: 0.75rem;
+  }
+
+  main section,
+  #explore-section,
+  #hero,
+  #feed-section,
+  #flights-section,
+  #hotels-section,
+  #places-section,
+  #bookings-section {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  #hero {
+    padding-top: 2.25rem !important;
+    padding-bottom: 2.25rem !important;
+  }
+
+  #hero-title {
+    font-size: 2.3rem !important;
+    line-height: 1.08 !important;
+  }
+
+  #hero-subtitle {
+    font-size: 1rem !important;
+  }
+
+  .card-gradient {
+    border-radius: 1.15rem;
+  }
+
+  input, select, textarea {
+    font-size: 16px !important;
+    min-height: 46px;
+  }
+
+  button, .autocomplete-option {
+    min-height: 44px;
+  }
+
+  .autocomplete-list {
+    max-height: 55vh;
+    border-radius: 18px;
+  }
+
+  #booking-modal,
+  #detail-modal,
+  #feed-detail-modal,
+  #place-detail-modal,
+  #auth-modal,
+  #city-modal,
+  #city-selector-modal,
+  #delete-confirm {
+    padding: 0.55rem !important;
+    align-items: flex-start !important;
+    padding-top: max(0.55rem, env(safe-area-inset-top)) !important;
+  }
+
+  #booking-modal .card-gradient,
+  #detail-modal .card-gradient,
+  #feed-detail-modal .card-gradient,
+  #place-detail-modal .card-gradient,
+  #auth-modal .card-gradient,
+  #city-modal .card-gradient,
+  #city-selector-modal .card-gradient,
+  #delete-confirm .card-gradient {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: calc(100vh - 1.1rem) !important;
+    border-radius: 1.25rem !important;
+  }
+
+  #detail-modal-content,
+  #feed-detail-content,
+  #place-detail-content,
+  #modal-content {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  #detail-modal-content .h-48 {
+    height: 15rem !important;
+  }
+
+  #bookings-list .card-gradient > .flex,
+  #booking-results-list .card-gradient > .flex,
+  #flight-results-list .card-gradient > .flex,
+  #hotel-results-list .card-gradient > .flex {
+    gap: 0.85rem !important;
+  }
+
+  #bookings-list .w-20.h-20 {
+    width: 5.5rem !important;
+    height: 5.5rem !important;
+  }
+
+  #bookings-list .flex.items-start.justify-between {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  #bookings-list .flex.flex-col.items-end {
+    width: 100%;
+    align-items: stretch !important;
+    margin-top: 0.35rem;
+  }
+
+  #bookings-list .booking-pay-btn {
+    width: 100%;
+  }
+
+  #toast {
+    left: 1rem !important;
+    right: 1rem !important;
+    bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid {
+    gap: 0.85rem !important;
+  }
+
+  .text-4xl,
+  .text-5xl,
+  .text-6xl {
+    line-height: 1.08 !important;
+  }
+
+  #destinations-grid,
+  #personal-destinations-grid,
+  #feed-list,
+  #places-content .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .booking-pay-btn {
+    min-height: 52px;
+    font-size: 1rem !important;
+    border-radius: 1rem !important;
+  }
+
+  #detail-modal-content .text-2xl {
+    font-size: 1.35rem !important;
+  }
+
+  #detail-modal-content .grid.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+/* === Adaptive mobile matrix ===
+   Проверяла логику не под один абстрактный телефон, а под сетку экранов:
+   320, 360, 375, 390, 393, 412, 414, 430, 480, 540, 640, 768px
+   и длинные/короткие экраны. Смысл: если ширина узкая - не пытаемся впихнуть
+   статус, цену и кнопки в одну строку. Пусть они уходят вниз красиво, а не ломают карточку.
+*/
+:root {
+  --tp-phone-gutter: clamp(12px, 4vw, 18px);
+  --tp-card-gap: clamp(10px, 3vw, 16px);
+  --tp-thumb-sm: clamp(68px, 22vw, 92px);
+}
+
+.hotel-amenities {
+  max-width: 100%;
+}
+.hotel-amenity-chip {
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+@media (max-width: 540px) {
+  /* Общие карточки поиска и ленты: картинка слева, текст справа, действия ниже. */
+  #flight-results-list .card-gradient,
+  #hotel-results-list .card-gradient,
+  #feed-results .card-gradient,
+  #bookings-list .card-gradient {
+    padding: 14px !important;
+  }
+
+  #flight-results-list .card-gradient > .flex,
+  #hotel-results-list .card-gradient > .flex,
+  #feed-results .card-gradient > .flex,
+  #bookings-list .card-gradient > .flex {
+    width: 100%;
+  }
+
+  #flight-results-list .card-gradient > .flex.items-center,
+  #hotel-results-list .card-gradient > .flex.items-center,
+  #feed-results .card-gradient > .flex.items-center {
+    align-items: flex-start !important;
+  }
+
+  #flight-results-list .card-gradient > .flex.items-center.gap-4:last-child,
+  #hotel-results-list .card-gradient > .flex.items-center.gap-4:last-child,
+  #feed-results .card-gradient > .flex.items-center.gap-4:last-child {
+    width: 100%;
+    justify-content: space-between;
+    align-items: center !important;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 12px;
+  }
+
+  #flight-results-list .card-gradient button,
+  #hotel-results-list .card-gradient button,
+  #feed-results .card-gradient button {
+    min-width: 128px;
+    min-height: 46px;
+    border-radius: 14px !important;
+  }
+
+  .hotel-amenities {
+    gap: 5px !important;
+  }
+  .hotel-amenity-chip {
+    font-size: 10.5px !important;
+    padding: 5px 8px !important;
+  }
+
+  /* Профиль: пароль и кнопки не должны давить друг друга на тонком экране. */
+  #profile-new-password {
+    width: 100%;
+  }
+  #profile-new-password + button {
+    min-width: 104px;
+  }
+}
+
+@media (max-width: 430px) {
+  main section,
+  #explore-section,
+  #hero,
+  #feed-section,
+  #flights-section,
+  #hotels-section,
+  #places-section,
+  #bookings-section {
+    padding-left: var(--tp-phone-gutter) !important;
+    padding-right: var(--tp-phone-gutter) !important;
+  }
+
+  /* Карточки броней: статус, цена, кнопка и корзина уходят вниз отдельным блоком. */
+  #bookings-list .card-gradient > .flex {
+    align-items: flex-start !important;
+  }
+  #bookings-list .card-gradient .w-20.h-20 {
+    width: var(--tp-thumb-sm) !important;
+    height: var(--tp-thumb-sm) !important;
+  }
+  #bookings-list .card-gradient .flex.items-start.justify-between {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+  #bookings-list .card-gradient .flex.flex-col.items-end {
+    align-items: stretch !important;
+    width: 100% !important;
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 12px;
+  }
+  #bookings-list .card-gradient .flex.items-center.gap-1\.5 {
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px !important;
+  }
+  #bookings-list .booking-pay-btn {
+    flex: 1;
+    min-height: 54px;
+    font-size: 1.05rem !important;
+  }
+
+  /* Статусные плашки иногда не помещаются рядом с типом карточки - пусть переносятся. */
+  #bookings-list .flex.items-center.gap-2.mb-0\.5 {
+    flex-wrap: wrap;
+  }
+
+  /* Профиль: блок пароля в колонку, иначе кнопка залезает в край. */
+  #auth-modal .bg-white\/5 .flex.gap-2 {
+    flex-direction: column !important;
+  }
+  #auth-modal .bg-white\/5 .flex.gap-2 button {
+    width: 100% !important;
+  }
+
+  /* Отели и поиск: если ширины мало, низ карточки переносится вниз. */
+  #hotel-results-list .card-gradient,
+  #flight-results-list .card-gradient,
+  #feed-results .card-gradient {
+    gap: 12px !important;
+  }
+  #hotel-results-list .card-gradient > .flex.items-center.gap-4:last-child,
+  #flight-results-list .card-gradient > .flex.items-center.gap-4:last-child,
+  #feed-results .card-gradient > .flex.items-center.gap-4:last-child {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  #hotel-results-list .card-gradient > .flex.items-center.gap-4:last-child .text-right,
+  #flight-results-list .card-gradient > .flex.items-center.gap-4:last-child .text-right,
+  #feed-results .card-gradient > .flex.items-center.gap-4:last-child .text-right {
+    text-align: left !important;
+  }
+  #hotel-results-list .card-gradient > .flex.items-center.gap-4:last-child button,
+  #flight-results-list .card-gradient > .flex.items-center.gap-4:last-child button,
+  #feed-results .card-gradient > .flex.items-center.gap-4:last-child button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 390px) {
+  #hero-title { font-size: 2rem !important; }
+  .card-gradient { border-radius: 16px !important; }
+
+  #hotel-results-list .w-20.h-16,
+  #flight-results-list .w-20.h-16,
+  #feed-results .w-20.h-16 {
+    width: 76px !important;
+    height: 72px !important;
+  }
+
+  .hotel-amenity-chip {
+    font-size: 10px !important;
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  body { font-size: 14px; }
+
+  #hotel-results-list .card-gradient > .flex.items-center.gap-4:first-child,
+  #flight-results-list .card-gradient > .flex.items-center.gap-4:first-child,
+  #feed-results .card-gradient > .flex.items-center.gap-4:first-child,
+  #bookings-list .card-gradient > .flex {
+    gap: 10px !important;
+  }
+
+  #hotel-results-list .w-20.h-16,
+  #flight-results-list .w-20.h-16,
+  #feed-results .w-20.h-16,
+  #bookings-list .w-20.h-20 {
+    width: 68px !important;
+    height: 68px !important;
+  }
+
+  .booking-pay-btn {
+    min-height: 56px !important;
+  }
+}
+
+@media (max-height: 680px) and (max-width: 430px) {
+  #auth-modal .card-gradient,
+  #booking-modal .card-gradient,
+  #detail-modal .card-gradient,
+  #feed-detail-modal .card-gradient,
+  #place-detail-modal .card-gradient {
+    max-height: calc(100dvh - 12px) !important;
+  }
+}
+
+
+/* === Booking actions cleanup ===
+   Блок оплаты в брони теперь не висит отдельной оранжевой плитой посреди карточки.
+   Цена, кнопка и корзина живут в одном аккуратном блоке, а на телефоне сжимаются,
+   чтобы не ломать композицию на узком экране. */
+.booking-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+  min-width: 150px;
+}
+.booking-price {
+  font-size: 1.15rem;
+  line-height: 1.15;
+  font-weight: 800;
+  color: #38bdf8;
+  white-space: nowrap;
+}
+.booking-date-paid {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.booking-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  width: 100%;
+}
+.booking-delete-btn {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  border-radius: 12px;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.booking-delete-btn:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+@media (max-width: 768px) {
+  #bookings-list .booking-actions {
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+    margin-top: 0.25rem;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    background: rgba(255,255,255,0.035);
+  }
+  #bookings-list .booking-price {
+    font-size: 1.2rem;
+    text-align: left;
+  }
+  #bookings-list .booking-actions-row {
+    justify-content: space-between;
+  }
+  #bookings-list .booking-pay-btn {
+    width: auto;
+    min-height: 42px;
+    padding: 0.65rem 1.05rem !important;
+    font-size: 0.92rem !important;
+    border-radius: 14px !important;
+    flex: 0 1 auto;
+  }
+}
+
+@media (max-width: 430px) {
+  #bookings-list .booking-actions {
+    padding: 10px;
+  }
+  #bookings-list .booking-actions-row {
+    gap: 8px;
+  }
+  #bookings-list .booking-pay-btn {
+    min-height: 40px !important;
+    padding: 0.6rem 0.9rem !important;
+    font-size: 0.9rem !important;
+    flex: 1 1 auto;
+    max-width: 190px;
+  }
+  #bookings-list .booking-delete-btn {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+  }
+}
+
+@media (max-width: 360px) {
+  #bookings-list .booking-pay-btn {
+    min-height: 38px !important;
+    padding: 0.55rem 0.75rem !important;
+    font-size: 0.86rem !important;
+  }
+}
+
+/* === Booking action bar v33 ===
+   Кнопка оплаты больше не болтается справа как случайно приклеенная бирка.
+   Вся зона действий живет внизу карточки: цена слева, оплатить/удалить справа.
+   На телефоне блок складывается спокойно и не раздувает карточку. */
+#bookings-list .booking-content-inner {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100%;
+  gap: 0.85rem;
+}
+#bookings-list .booking-main-info {
+  width: 100%;
+  min-width: 0;
+}
+#bookings-list .booking-actions-bottom {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin-top: 0.45rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  background: transparent !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.75rem;
+}
+#bookings-list .booking-price-wrap {
+  min-width: 0;
+}
+#bookings-list .booking-actions-bottom .booking-price {
+  font-size: 1.35rem;
+  text-align: left;
+}
+#bookings-list .booking-actions-bottom .booking-actions-row {
+  width: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+}
+#bookings-list .booking-actions-bottom .booking-pay-btn {
+  width: auto !important;
+  min-height: 44px !important;
+  padding: 0.75rem 1.35rem !important;
+  font-size: 0.96rem !important;
+  border-radius: 15px !important;
+  flex: 0 0 auto !important;
+  max-width: none !important;
+}
+#bookings-list .booking-actions-bottom .booking-delete-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+}
+
+@media (max-width: 540px) {
+  #bookings-list .booking-actions-bottom {
+    align-items: stretch !important;
+    gap: 0.65rem;
+  }
+  #bookings-list .booking-actions-bottom .booking-price {
+    font-size: 1.25rem;
+  }
+  #bookings-list .booking-actions-bottom .booking-pay-btn {
+    min-height: 40px !important;
+    padding: 0.62rem 1rem !important;
+    font-size: 0.9rem !important;
+    border-radius: 13px !important;
+  }
+}
+
+@media (max-width: 390px) {
+  #bookings-list .booking-actions-bottom {
+    flex-direction: column !important;
+  }
+  #bookings-list .booking-actions-bottom .booking-actions-row {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+  #bookings-list .booking-actions-bottom .booking-pay-btn {
+    flex: 1 1 auto !important;
+    max-width: 210px !important;
+  }
+}

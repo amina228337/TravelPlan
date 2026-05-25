@@ -1,0 +1,161 @@
+<!-- Зачем этот файл: Лента предложений: фильтры и контейнер карточек. -->
+<!-- BEGIN pages/feed.html -->
+  <section id="feed-section" class="px-6 py-12 hidden">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="text-2xl md:text-3xl font-bold mb-2 text-center">📰 Лента поездок</h2>
+      <p class="text-slate-400 text-center mb-8">Популярные предложения · настройте фильтры под себя</p>
+
+      <!-- Filters panel -->
+      <div class="card-gradient rounded-2xl p-5 mb-8">
+        <div class="flex items-center gap-2 mb-4 cursor-pointer" onclick="toggleFilters()">
+          <span class="font-semibold">🔧 Фильтры</span>
+          <span id="filters-arrow" class="text-sky-400 text-sm transition-transform">▼</span>
+          <span id="filters-badge" class="hidden bg-sky-500 text-white text-xs px-2 py-0.5 rounded-full">активны</span>
+        </div>
+        <div id="filters-panel" class="space-y-5">
+
+          <!-- Type toggle -->
+          <div class="flex gap-3">
+            <button onclick="setFeedType('all')"     id="ft-all"     class="feed-type-btn flex-1 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-sky-500 to-blue-600 transition">Всё</button>
+            <button onclick="setFeedType('flight')"  id="ft-flight"  class="feed-type-btn flex-1 py-2 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/20 transition">✈️ Билеты</button>
+            <button onclick="setFeedType('hotel')"   id="ft-hotel"   class="feed-type-btn flex-1 py-2 rounded-xl text-sm font-medium bg-white/10 hover:bg-white/20 transition">🏨 Отели</button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            <!-- Price range -->
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Цена до (₸)</label>
+              <input type="range" id="filter-price" min="20000" max="600000" step="10000" value="600000"
+                class="w-full accent-sky-400"
+                oninput="document.getElementById('filter-price-val').textContent = Number(this.value).toLocaleString()">
+              <div class="text-sm text-sky-400 mt-1">до <span id="filter-price-val">600 000</span> ₸</div>
+            </div>
+
+            <!-- Country filter -->
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Страна</label>
+              <select id="filter-country" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="">Любая страна</option>
+                <option value="kz">🇰🇿 Казахстан</option>
+                <option value="ru">🇷🇺 Россия</option>
+                <option value="cy">🇨🇾 Кипр</option>
+                <option value="tr">🇹🇷 Турция</option>
+                <option value="ae">🇦🇪 ОАЭ</option>
+                <option value="ge">🇬🇪 Грузия</option>
+                <option value="cz">🇨🇿 Чехия</option>
+                <option value="es">🇪🇸 Испания</option>
+                <option value="it">🇮🇹 Италия</option>
+                <option value="fr">🇫🇷 Франция</option>
+                <option value="th">🇹🇭 Таиланд</option>
+                <option value="jp">🇯🇵 Япония</option>
+                <option value="kr">🇰🇷 Южная Корея</option>
+                <option value="cn">🇨🇳 Китай</option>
+                <option value="us">🇺🇸 США</option>
+                <option value="gb">🇬🇧 Великобритания</option>
+                <option value="de">🇩🇪 Германия</option>
+                <option value="gr">🇬🇷 Греция</option>
+                <option value="eg">🇪🇬 Египет</option>
+                <option value="uz">🇺🇿 Узбекистан</option>
+              </select>
+            </div>
+
+            <!-- Sort -->
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Сортировка</label>
+              <select id="filter-sort" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="price_asc">По цене (дешевле)</option>
+                <option value="price_desc">По цене (дороже)</option>
+                <option value="rating">По рейтингу</option>
+                <option value="duration">По длительности</option>
+                <option value="profile">Под мой профиль</option>
+              </select>
+            </div>
+
+            <!-- Departure time (for flights) -->
+            <div id="filter-deptime-wrap">
+              <label class="block text-xs text-slate-400 mb-1">Время вылета</label>
+              <select id="filter-deptime" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="">Любое</option>
+                <option value="morning">Утро (06:00–12:00)</option>
+                <option value="day">День (12:00–18:00)</option>
+                <option value="evening">Вечер (18:00–00:00)</option>
+                <option value="night">Ночь (00:00–06:00)</option>
+              </select>
+            </div>
+
+            <!-- Stops (for flights) -->
+            <div id="filter-stops-wrap">
+              <label class="block text-xs text-slate-400 mb-1">Пересадки</label>
+              <select id="filter-stops" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="">Любые</option>
+                <option value="0">Прямой рейс</option>
+                <option value="1">1 пересадка</option>
+                <option value="2">2+ пересадки</option>
+              </select>
+            </div>
+
+            <!-- Class (for flights) -->
+            <div id="filter-class-wrap">
+              <label class="block text-xs text-slate-400 mb-1">Класс обслуживания</label>
+              <select id="filter-class" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="">Любой</option>
+                <option value="economy">Эконом</option>
+                <option value="comfort">Комфорт</option>
+                <option value="business">Бизнес</option>
+                <option value="first">Первый</option>
+              </select>
+            </div>
+
+            <!-- Duration (for flights) -->
+            <div id="filter-duration-wrap">
+              <label class="block text-xs text-slate-400 mb-1">Длительность полёта</label>
+              <select id="filter-duration" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="">Любая</option>
+                <option value="short">До 3 часов</option>
+                <option value="medium">3–8 часов</option>
+                <option value="long">Более 8 часов</option>
+              </select>
+            </div>
+
+            <!-- Stars (for hotels) -->
+            <div id="filter-stars-wrap">
+              <label class="block text-xs text-slate-400 mb-1">Звёздность отеля</label>
+              <select id="filter-stars" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+                <option value="">Любая</option>
+                <option value="3">3 звезды</option>
+                <option value="4">4 звезды</option>
+                <option value="5">5 звёзд</option>
+              </select>
+            </div>
+
+            <!-- Amenities (for hotels) -->
+            <div id="filter-amenities-wrap">
+              <label class="block text-xs text-slate-400 mb-2">Удобства в отеле</label>
+              <div class="flex flex-wrap gap-2">
+                <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" class="amenity-cb accent-sky-400" value="pool"> 🏊 Бассейн</label>
+                <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" class="amenity-cb accent-sky-400" value="spa"> 💆 SPA</label>
+                <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" class="amenity-cb accent-sky-400" value="gym"> 🏋️ Фитнес</label>
+                <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" class="amenity-cb accent-sky-400" value="beach"> 🏖️ Пляж</label>
+                <label class="flex items-center gap-1 text-xs cursor-pointer"><input type="checkbox" class="amenity-cb accent-sky-400" value="breakfast"> 🍳 Завтрак</label>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="flex gap-3">
+            <button onclick="applyFeedFilters()" class="flex-1 py-3 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl font-semibold hover:from-sky-400 hover:to-blue-500 transition">
+              Применить фильтры
+            </button>
+            <button onclick="resetFeedFilters()" class="px-6 py-3 bg-slate-700 rounded-xl font-semibold hover:bg-slate-600 transition text-sm">
+              Сбросить
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feed results -->
+      <div id="feed-results" class="space-y-4"></div>
+    </div>
+  </section>
+  <!-- END pages/feed.html -->

@@ -1,0 +1,45 @@
+<!-- Зачем этот файл: Главная страница: hero-блок, топ-направления и персональные рекомендации. -->
+<!-- BEGIN pages/explore.html -->
+  <div id="explore-page">
+
+    <!-- Hero -->
+    <section id="hero" class="px-6 py-16 text-center relative overflow-hidden">
+      <div class="relative z-10 max-w-3xl mx-auto">
+        <h1 id="hero-title" class="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-sky-400 to-blue-500 bg-clip-text text-transparent">
+          Откройте мир путешествий
+        </h1>
+        <p id="hero-subtitle" class="text-lg md:text-xl text-slate-300 mb-8">
+          Планируйте идеальные поездки, бронируйте билеты и отели в одном месте. Смотрите куда сходить во всех интересуемых городах
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <button onclick="showSection('flights')"
+            class="px-8 py-4 bg-gradient-to-r from-sky-500 to-blue-600 rounded-full font-semibold text-lg hover:from-sky-400 hover:to-blue-500 transition transform hover:scale-105 glow">
+            ✈️ Найти билеты
+          </button>
+          <button onclick="showSection('feed')"
+            class="px-8 py-4 bg-white/10 border border-white/20 rounded-full font-semibold text-lg hover:bg-white/20 transition transform hover:scale-105">
+            📰 Лента поездок
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Top-3 Destination cards -->
+    <section id="explore-section" class="px-6 pb-16">
+      <h2 class="text-2xl md:text-3xl font-bold mb-2 text-center">🔥 Топ направления</h2>
+      <p id="top-directions-subtitle" class="text-slate-400 text-center mb-8 text-sm">Самые популярные у путешественников из Алматы · данные Aviasales.kz</p>
+      <div id="destinations-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"></div>
+      <div class="text-center mt-8">
+        <button onclick="showSection('feed')" class="px-6 py-3 bg-white/10 border border-white/20 rounded-full font-semibold hover:bg-white/20 transition text-sm">
+          Смотреть все направления в ленте →
+        </button>
+      </div>
+    </section>
+
+    <section id="personal-section" class="px-6 pb-16">
+      <h2 class="text-2xl md:text-3xl font-bold mb-2 text-center">✨ Подобрано под ваш профиль</h2>
+      <p id="personal-subtitle" class="text-slate-400 text-center mb-8 text-sm">Стиль и бюджет можно поменять в профиле.</p>
+      <div id="personal-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"></div>
+    </section>
+  </div>
+  <!-- END pages/explore.html -->

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Планировщик Путешествий - TravelPlan</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="/_sdk/element_sdk.js"></script>
+  <script src="/_sdk/data_sdk.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=34">
+  <link rel="stylesheet" href="css/booking-mobile-actions.css?v=34">
+</head>
+<body class="h-full gradient-bg text-white overflow-auto auth-booting">
+<div id="app" class="min-h-full w-full flex flex-col">
+
+  <!-- INCLUDE pages/header.html -->
+  <!-- MAIN CONTENT -->
+  <main class="flex-1">
+
+  <!-- ===== EXPLORE ===== -->
+  <!-- INCLUDE pages/explore.html -->
+
+  <!-- ===== FEED ===== -->
+  <!-- INCLUDE pages/feed.html -->
+
+  <!-- ===== FLIGHTS ===== -->
+  <!-- INCLUDE pages/flights.html -->
+
+  <!-- ===== HOTELS ===== -->
+  <!-- INCLUDE pages/hotels.html -->
+
+
+  <!-- INCLUDE pages/places.html -->
+  <!-- ===== BOOKINGS ===== -->
+  <!-- INCLUDE pages/bookings.html -->
+
+  </main>
+
+  <!-- INCLUDE pages/modals.html -->
+  <!-- INCLUDE pages/footer.html -->
+</div><!-- #app -->
+
+<!-- Booking Detail Modal -->
+<div id="detail-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4" style="display:none">
+  <div class="card-gradient rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div class="sticky top-0 z-20 flex items-center justify-between px-5 pt-5 pb-3 bg-[#14233c]/95 backdrop-blur border-b border-white/10 rounded-t-2xl">
+      <span class="text-xs text-slate-500 uppercase tracking-widest">Детали поездки</span>
+      <button onclick="closeDetailModal()" class="text-2xl hover:text-sky-400 transition leading-none">×</button>
+    </div>
+    <div id="detail-modal-content" class="px-5 pb-6 pt-4"></div>
+  </div>
+</div>
+
+<!-- Feed Item Detail Modal -->
+<div id="feed-detail-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4" style="display:none">
+  <div class="card-gradient rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div class="sticky top-0 z-20 flex items-center justify-between px-5 pt-5 pb-3 bg-[#14233c]/95 backdrop-blur border-b border-white/10 rounded-t-2xl">
+      <span class="text-xs text-slate-500 uppercase tracking-widest">Направление</span>
+      <button onclick="closeFeedDetailModal()" class="text-2xl hover:text-sky-400 transition leading-none">×</button>
+    </div>
+    <div id="feed-detail-content" class="px-5 pb-6"></div>
+  </div>
+</div>
+
+<!-- City Selector Modal -->
+<div id="city-selector-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4" style="display:none">
+  <div class="card-gradient rounded-2xl max-w-sm w-full max-h-[72vh] overflow-hidden flex flex-col">
+    <div class="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
+      <h3 class="text-lg font-bold">📍 Ваш город</h3>
+      <button onclick="closeCitySelector()" class="text-2xl hover:text-sky-400 transition leading-none">×</button>
+    </div>
+    <p class="text-slate-400 text-sm px-5 pb-3 flex-shrink-0">Выберите город отправления - цены и поле «Откуда» будут заполнены автоматически.</p>
+    <div class="px-5 pb-5 space-y-2 overflow-y-auto min-h-0" id="city-selector-list"></div>
+  </div>
+</div>
+
+<!-- City modal -->
+<div id="city-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4" style="display:none">
+  <div class="card-gradient rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div class="sticky top-0 z-20 flex items-center justify-between px-5 pt-5 pb-3 bg-[#14233c]/95 backdrop-blur border-b border-white/10 rounded-t-2xl">
+      <span class="text-xs text-slate-500 uppercase tracking-widest">Направление</span>
+      <button onclick="closeCityModal()" class="text-2xl hover:text-sky-400 transition leading-none">×</button>
+    </div>
+    <div id="city-modal-content" class="px-5 pb-6"></div>
+  </div>
+</div>
+
+<!-- Kaspi QR modal -->
+<div id="kaspi-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden items-center justify-center p-4" style="display:none">
+  <div class="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center">
+    <div id="kaspi-modal-content"></div>
+  </div>
+</div>
+
+<!-- SCRIPTS - порядок важен -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/utils.js?v=34"></script>
+<script src="js/supabaseClient.js?v=34"></script>
+<script src="js/db.js?v=34"></script>
+<script src="js/auth.js?v=34"></script>
+<script src="js/personalization.js?v=34"></script>
+<script src="js/kaspi.js?v=34"></script>
+<script src="js/navigation.js?v=34"></script>
+<script src="js/destinations.js?v=34"></script>
+<script src="js/bookings.js?v=34"></script>
+<script src="js/flights.js?v=34"></script>
+<script src="js/hotels.js?v=34"></script>
+<script src="js/feed.js?v=34"></script>
+<script src="js/places.js?v=34"></script>
+<script src="js/app.js?v=34"></script>
+
+</body>
+</html>
