@@ -29,10 +29,21 @@ function searchFlights() {
       ? getSearchFlightPrice(to, f.price, from, index)
       : f.price;
     const total = onePassengerPrice * passengers;
+    const localCityImg = typeof tpCityImage === 'function' ? tpCityImage(to) : null;
+    const cityImgUrl = localCityImg || (typeof tpRemoteImageUrl === 'function'
+      ? tpRemoteImageUrl(`${to} city skyline travel`, 400, 300)
+      : `https://loremflickr.com/400/300/${encodeURIComponent(to + ',city,travel,landmark')}?lock=${index + 42}`);
+    const cityImgFallback = typeof tpRemoteImageUrl === 'function'
+      ? tpRemoteImageUrl(`${to} city skyline travel`, 400, 300)
+      : 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=400&q=70';
     return `
       <div class="card-gradient rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="flex items-center gap-4">
-          <div class="w-12 h-12 bg-slate-700 rounded-xl flex items-center justify-center text-xl">✈️</div>
+          <div class="w-20 h-16 rounded-xl overflow-hidden relative flex-shrink-0 border border-white/10">
+            <img src="${cityImgUrl}" alt="${to}" loading="lazy" class="w-full h-full object-cover"
+                 onerror="this.onerror=null;this.src='${cityImgFallback}'">
+            <div class="absolute inset-0 bg-black/10"></div>
+          </div>
           <div>
             <div class="font-semibold">${f.airline}</div>
             <div class="text-sm text-slate-400">${from} → ${to}</div>
@@ -82,11 +93,22 @@ function openFlightModal(airline, from, to, dateFrom, dateTo, price, passengers,
   const returnDepart = getReturnDepartTime(departTime);
   const returnArrive = addMinutesToTime(returnDepart, parseFlightDurationMinutes(durationText));
 
+  const _flightModalImg = (typeof tpCityImage === 'function' ? tpCityImage(to) : null)
+    || (typeof tpRemoteImageUrl === 'function' ? tpRemoteImageUrl(to + ' city skyline travel', 800, 400) : 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=70');
+  const _flightModalFallback = typeof tpRemoteImageUrl === 'function'
+    ? tpRemoteImageUrl(to + ' city skyline travel', 800, 400)
+    : 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=70';
   document.getElementById('modal-content').innerHTML = `
     <div class="space-y-4">
-      <div class="h-36 bg-gradient-to-br from-sky-500/25 to-blue-600/25 flex flex-col items-center justify-center gap-1 rounded-xl mb-5">
-        <span class="text-5xl">✈️</span>
-        <span class="text-sm text-slate-300">${from} → ${to}</span>
+      <div class="h-48 rounded-2xl overflow-hidden relative border border-white/10 mb-5">
+        <img src="${_flightModalImg}" 
+             alt="${to}" loading="lazy" class="w-full h-full object-cover"
+             onerror="this.onerror=null;this.src='${_flightModalFallback}'">
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/15 to-transparent"></div>
+        <div class="absolute left-4 bottom-4 right-4">
+          <div class="text-xl font-bold text-white drop-shadow">✈️ ${airline}</div>
+          <div class="text-sm text-white/70">${from} → ${to}</div>
+        </div>
       </div>
       <div class="flex items-center justify-between mb-1">
         <div>
