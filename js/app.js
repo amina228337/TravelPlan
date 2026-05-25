@@ -148,7 +148,7 @@ function setupAutocomplete(inputId, listId, mode = 'city') {
   const input = document.getElementById(inputId);
   const list = document.getElementById(listId);
   if (!input || !list) return;
-  const values = getAutocompleteValues(mode);
+  const values = tpCached(`autocomplete_${mode}`, () => getAutocompleteValues(mode), 300000);
 
   function render() {
     const q = input.value.trim().toLowerCase();
@@ -162,7 +162,8 @@ function setupAutocomplete(inputId, listId, mode = 'city') {
     list.classList.remove('hidden');
   }
 
-  input.addEventListener('input', render);
+  const debouncedRender = debounce(render, 220);
+  input.addEventListener('input', debouncedRender);
   input.addEventListener('focus', render);
   list.addEventListener('mousedown', (e) => {
     const btn = e.target.closest('.autocomplete-option');
