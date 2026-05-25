@@ -47,10 +47,22 @@ function searchHotels() {
       ? (h.price || getHotelPriceForCity(city, index, 40000))
       : (h.price || 40000);
     const rating = Number(h.rating || 8.7).toFixed(1);
+    const _localHotelImg = typeof tpHotelImage === 'function' ? tpHotelImage(h.name, city) : null;
+    const _localCityImg = typeof tpCityImage === 'function' ? tpCityImage(city) : null;
+    const hotelImgUrl = _localHotelImg || _localCityImg || (typeof tpRemoteImageUrl === 'function'
+      ? tpRemoteImageUrl(`${h.name} ${city} hotel`, 400, 300)
+      : `https://loremflickr.com/400/300/${encodeURIComponent(h.name + ',' + city + ',hotel')}?lock=${index + 77}`);
+    const hotelImgFallback = typeof tpRemoteImageUrl === 'function'
+      ? tpRemoteImageUrl(`${city} hotel`, 400, 300)
+      : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=70';
     return `
     <div class="card-gradient rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-slate-700 rounded-xl flex items-center justify-center text-2xl">${h.emoji || '🏨'}</div>
+        <div class="w-20 h-16 rounded-xl overflow-hidden relative flex-shrink-0 border border-white/10">
+          <img src="${hotelImgUrl}" alt="${h.name}" loading="lazy" class="w-full h-full object-cover"
+               onerror="this.onerror=null;this.src='${hotelImgFallback}'">
+          <div class="absolute inset-0 bg-black/10"></div>
+        </div>
         <div>
           <div class="font-semibold">${h.name}</div>
           <div class="text-sm text-slate-400">${city} · ${'⭐'.repeat(h.stars || 4)} · ${rating}/10</div>
@@ -78,11 +90,23 @@ function openHotelModal(name, destination, checkin, checkout, price, guests) {
   const nights = Math.max(1, Math.ceil((new Date(checkout) - new Date(checkin)) / 86400000));
   const total  = price * nights;
 
+  const _hotelModalImg = (typeof tpHotelImage === 'function' ? tpHotelImage(name, destination) : null)
+    || (typeof tpCityImage === 'function' ? tpCityImage(destination) : null)
+    || (typeof tpRemoteImageUrl === 'function' ? tpRemoteImageUrl(name + ' ' + destination + ' hotel', 800, 400) : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=70');
+  const _hotelModalFallback = typeof tpRemoteImageUrl === 'function'
+    ? tpRemoteImageUrl(destination + ' hotel', 800, 400)
+    : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=70';
   document.getElementById('modal-content').innerHTML = `
     <div class="space-y-4">
-      <div class="h-36 bg-gradient-to-br from-amber-500/25 to-orange-600/25 flex flex-col items-center justify-center gap-1 rounded-xl mb-5">
-        <span class="text-5xl">🏨</span>
-        <span class="text-sm text-slate-300">${destination}</span>
+      <div class="h-48 rounded-2xl overflow-hidden relative border border-white/10 mb-5">
+        <img src="${_hotelModalImg}"
+             alt="${name}" loading="lazy" class="w-full h-full object-cover"
+             onerror="this.onerror=null;this.src='${_hotelModalFallback}'">
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/15 to-transparent"></div>
+        <div class="absolute left-4 bottom-4 right-4">
+          <div class="text-xl font-bold text-white drop-shadow">🏨 ${name}</div>
+          <div class="text-sm text-white/70">📍 ${destination}</div>
+        </div>
       </div>
       <div class="flex items-center justify-between mb-1">
         <div>
