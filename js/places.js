@@ -1000,6 +1000,8 @@ function placeSlug(value) {
 }
 
 function getCityPhoto(city) {
+  // Приоритет: 1) явный override из TP_IMAGE_OVERRIDES 2) tpCityImage (правильный slug) 3) photo из DESTINATIONS
+  if (typeof tpCityImage === 'function') return tpCityImage(city);
   const dest = getPlacesDestination(city);
   return dest?.photo || `assets/images/cities/${placeSlug(city)}.jpg`;
 }
