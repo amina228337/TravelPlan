@@ -6,11 +6,35 @@ function jsString(value) {
   return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ');
 }
 
+// ── Debounce ──────────────────────────────────────────────────────────────
+function debounce(fn, delay = 250) {
+  let timer;
+  return function(...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+// ── Простой in-memory кеш ─────────────────────────────────────────────────
+const _tpCache = new Map();
+function tpCacheGet(key) { return _tpCache.get(key); }
+function tpCacheSet(key, value, ttlMs = 60000) {
+  _tpCache.set(key, { value, expires: Date.now() + ttlMs });
+  return value;
+}
+function tpCached(key, fn, ttlMs = 60000) {
+  const cached = _tpCache.get(key);
+  if (cached && Date.now() < cached.expires) return cached.value;
+  const result = fn();
+  _tpCache.set(key, { value: result, expires: Date.now() + ttlMs });
+  return result;
+}
+
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   const msg   = document.getElementById('toast-message');
   if (!toast || !msg) return;
-  toast.className = `fixed bottom-6 right-6 text-white px-6 py-3 rounded-xl shadow-lg z-50 transition-all duration-300 ${type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`;
+  toast.className = `fixed bottom-6 right-6 text-white px-6 py-3 rounded-xl shadow-lg z-[9999] transition-all duration-300 ${type === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`;
   msg.textContent = message;
   toast.classList.remove('translate-y-20', 'opacity-0');
   setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
