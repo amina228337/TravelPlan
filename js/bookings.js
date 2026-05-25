@@ -218,6 +218,7 @@ function getPaidBookingStatsForFeedItem(item) {
 // ── Детальное модальное окно брони ──────────────────────────────────────────
 
 function openBookingDetail(id) {
+  
   const booking = bookings.find(b => b.__backendId === id);
   if (!booking) return;
 
@@ -318,18 +319,32 @@ function openBookingDetail(id) {
   const bookingId = booking.__backendId || booking.id || '-';
   const createdAt = booking.created_at ? formatDate(booking.created_at) : '-';
 
+  const imgQuery = isFlight
+    ? `${booking.city_to || booking.destination} city skyline travel`
+    : `${booking.departure || booking.destination} hotel`;
+  const imgUrl = typeof tpRemoteImageUrl === 'function'
+    ? tpRemoteImageUrl(imgQuery, 800, 400)
+    : `https://loremflickr.com/800/400/${encodeURIComponent(imgQuery + ',travel')}?lock=detail`;
+  const imgFallback = isFlight
+    ? 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=800&q=70'
+    : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=70';
+
   document.getElementById('detail-modal-content').innerHTML = `
     <div class="space-y-4">
-      <div class="h-40 bg-gradient-to-br from-sky-500/25 to-blue-600/25 flex flex-col items-center justify-center gap-1 rounded-xl mb-5">
-        <span class="text-6xl">${isFlight ? '✈️' : '🏨'}</span>
-        <span class="text-sm text-slate-300">${isFlight ? 'Поездка' : 'Отель'}</span>
-      </div>
-      <div class="flex items-center justify-between mb-2">
-        <div>
-          <div class="text-xl font-bold">${isFlight ? booking.departure : booking.departure}</div>
-          <div class="text-slate-400 text-sm">${isFlight ? getBookingRouteLabel(booking) : booking.destination}</div>
+      <div class="h-48 rounded-2xl overflow-hidden relative border border-white/10 mb-5">
+        <img src="${imgUrl}" alt="${booking.departure || booking.destination}" loading="lazy"
+             class="w-full h-full object-cover"
+             onerror="this.onerror=null;this.src='${imgFallback}'">
+        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"></div>
+        <div class="absolute left-4 bottom-4 right-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-2xl">${isFlight ? '✈️' : '🏨'}</span>
+            <span class="text-xs font-medium text-white/70 bg-black/40 px-2 py-0.5 rounded-full">${isFlight ? 'Перелёт' : 'Отель'}</span>
+            ${statusBadge}
+          </div>
+          <div class="text-xl font-bold text-white drop-shadow">${isFlight ? booking.departure : booking.departure}</div>
+          <div class="text-sm text-white/70">${isFlight ? getBookingRouteLabel(booking) : booking.destination}</div>
         </div>
-        ${statusBadge}
       </div>
       ${detailRows}
       <div class="bg-sky-500/20 rounded-xl p-4 flex justify-between items-center">
@@ -371,9 +386,7 @@ function renderBookings() {
     const isExpired = booking.status === 'expired';
     const isPaid    = booking.payment_status === 'paid';
     const typeIcon  = booking.type === 'flight' ? '✈️' : '🏨';
-    const typeBg    = isExpired
-      ? 'bg-slate-500/20'
-      : booking.type === 'flight' ? 'bg-sky-500/20' : 'bg-amber-500/20';
+    const isFlight  = booking.type === 'flight';
 
     const dateRange = booking.date_to
       ? `${formatDate(booking.date_from)} - ${formatDate(booking.date_to)}`
@@ -395,32 +408,61 @@ function renderBookings() {
         Оплатить
       </button>` : '';
 
+    // Изображение: для перелётов — город назначения, для отелей — название отеля + город
+    const _bookingCity = booking.city_to || booking.destination || '';
+    const _bookingHotelName = booking.departure || '';
+    const imgQuery = isFlight
+      ? `${_bookingCity} city skyline travel`
+      : `${_bookingHotelName} hotel`;
+    const imgUrl = isFlight
+      ? ((typeof tpCityImage === 'function' ? tpCityImage(_bookingCity) : null)
+          || (typeof tpRemoteImageUrl === 'function' ? tpRemoteImageUrl(imgQuery, 400, 300) : null)
+          || 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=400&q=70')
+      : ((typeof tpHotelImage === 'function' ? tpHotelImage(_bookingHotelName, _bookingCity) : null)
+          || (typeof tpCityImage === 'function' ? tpCityImage(booking.destination || _bookingCity) : null)
+          || (typeof tpRemoteImageUrl === 'function' ? tpRemoteImageUrl(imgQuery, 400, 300) : null)
+          || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=70');
+    const imgFallback = isFlight
+      ? (typeof tpRemoteImageUrl === 'function' ? tpRemoteImageUrl(imgQuery, 400, 300) : 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=400&q=70')
+      : (typeof tpRemoteImageUrl === 'function' ? tpRemoteImageUrl(imgQuery, 400, 300) : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=70');
+
     return `
-      <div class="card-gradient rounded-xl p-4 md:p-5 ${isExpired ? 'opacity-60' : ''} cursor-pointer hover:ring-1 hover:ring-sky-500/30 transition"
+      <div class="card-gradient rounded-xl p-4 ${isExpired ? 'opacity-60' : ''} cursor-pointer hover:ring-1 hover:ring-sky-500/30 transition"
            onclick="openBookingDetail('${booking.__backendId}')">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 rounded-xl flex items-center justify-center text-2xl ${typeBg}">${typeIcon}</div>
-            <div>
-              <div class="font-semibold text-lg">${booking.departure}</div>
-              <div class="text-slate-400">${booking.type === 'flight' ? getBookingRouteLabel(booking) : booking.destination}</div>
-              <div class="text-sm text-slate-500 mt-1">${dateRange} · ${booking.guests} гост.</div>
-              ${booking.type === 'flight' ? `<div class="text-xs text-slate-500 mt-1">Туда: ${booking.outbound_depart || '-'} → ${booking.outbound_arrive || '-'} · Обратно: ${booking.date_to ? `${booking.return_depart || '-'} → ${booking.return_arrive || '-'}` : '-'} · Дорога: ${booking.flight_duration || '-'}</div>` : ''}
-              <div class="mt-1.5 flex items-center gap-2">
-                ${statusBadge}
-                ${payBtn}
+        <div class="flex items-start gap-4">
+          <!-- Миниатюра как в ленте -->
+          <div class="w-20 h-20 rounded-xl overflow-hidden relative flex-shrink-0 border border-white/10">
+            <img src="${imgUrl}" alt="${booking.departure || booking.destination}" loading="lazy"
+                 class="w-full h-full object-cover"
+                 onerror="this.onerror=null;this.src='${imgFallback}'">
+            <div class="absolute inset-0 bg-black/10"></div>
+          </div>
+          <!-- Основная инфо -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="text-base">${typeIcon}</span>
+                  <span class="text-xs font-medium text-slate-400">${isFlight ? 'Перелёт' : 'Отель'}</span>
+                  ${statusBadge}
+                </div>
+                <div class="font-semibold text-base truncate">${booking.departure}</div>
+                <div class="text-slate-400 text-sm truncate">${isFlight ? getBookingRouteLabel(booking) : booking.destination}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${dateRange} · ${booking.guests} гост.</div>
+                ${isFlight ? `<div class="text-xs text-slate-500 mt-0.5">✈ ${booking.outbound_depart || '-'}→${booking.outbound_arrive || '-'}${booking.date_to ? ` · ↩ ${booking.return_depart || '-'}→${booking.return_arrive || '-'}` : ''}</div>` : ''}
+              </div>
+              <div class="flex flex-col items-end gap-1.5 shrink-0">
+                <div class="text-lg font-bold text-sky-400 whitespace-nowrap">${Number(booking.price).toLocaleString()} ₸</div>
+                ${isPaid ? `<div class="text-xs text-slate-500">${formatDate(booking.paid_at)}</div>` : ''}
+                <div class="flex items-center gap-1.5">
+                  ${payBtn}
+                  <button onclick="event.stopPropagation();requestDelete('${booking.__backendId}')"
+                    class="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition text-sm" title="${isExpired ? 'Удалить' : 'Отменить'}">
+                    🗑️
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="text-right">
-              <div class="text-xl font-bold text-sky-400">${Number(booking.price).toLocaleString()} ₸</div>
-              ${isPaid ? `<div class="text-xs text-slate-500">${formatDate(booking.paid_at)}</div>` : ''}
-            </div>
-            <button onclick="event.stopPropagation();requestDelete('${booking.__backendId}')"
-              class="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition" title="${isExpired ? 'Удалить из истории' : 'Отменить'}">
-              🗑️
-            </button>
           </div>
         </div>
       </div>`;
