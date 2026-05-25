@@ -223,3 +223,21 @@ body:not(.auth-booting) #app {
   opacity: 1;
   transition: opacity 0.18s ease;
 }
+
+/* === Lazy-load fade-in для картинок === */
+img[loading="lazy"] {
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+img[loading="lazy"].loaded,
+img[loading="lazy"]:not([src=""]) {
+  opacity: 1;
+}
+
+/* === Booking card image === */
+.booking-card-img {
+  transition: transform 0.4s ease;
+}
+.booking-card-img:hover {
+  transform: scale(1.03);
+}
