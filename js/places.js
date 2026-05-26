@@ -2,11 +2,6 @@
 // places.js - интересные места по городам
 // =============================================
 
-// Зачем этот файл:
-// Интересные места: карточки, модалки, фото, истории и переходы к отелям.
-// Комментарии специально оставлены простыми: чтобы через неделю было понятно,
-// что здесь происходит, а не почему JS снова решил устроить квест.
-
 
 const PLACES_COUNTRY_NAMES = {
   kz: 'Казахстан', ru: 'Россия', cy: 'Кипр', tr: 'Турция', ae: 'ОАЭ', ge: 'Грузия', cz: 'Чехия', es: 'Испания', it: 'Италия', fr: 'Франция', th: 'Таиланд', jp: 'Япония', kr: 'Южная Корея', cn: 'Китай', us: 'США', gb: 'Великобритания', de: 'Германия', gr: 'Греция', eg: 'Египет', uz: 'Узбекистан'
@@ -1151,6 +1146,19 @@ function getPlaceItems(city, category) {
 }
 
 
+function renderPlaceEntryBadge(entry, size = 'sm') {
+  const isPaid = Boolean(entry?.price);
+  const label = entry?.label || 'Бесплатно';
+  const sizeClass = size === 'md'
+    ? 'px-3 py-1.5 text-sm'
+    : 'px-2.5 py-1 text-[11px]';
+  const colorClass = isPaid
+    ? 'bg-amber-500/15 text-amber-200 border-amber-400/25'
+    : 'bg-emerald-500/15 text-emerald-200 border-emerald-400/25';
+
+  return `<span class="inline-flex w-fit items-center rounded-full border ${sizeClass} font-semibold shadow-sm backdrop-blur-sm ${colorClass}">${label}</span>`;
+}
+
 function renderPlacePills(activeCity) {
   const wrap = document.getElementById('places-city-pills');
   if (!wrap) return;
@@ -1186,15 +1194,7 @@ function renderPlacesCategory(title, icon, items, city, category) {
                 <div class="text-xs text-slate-300/80 mb-1">${String(index + 1).padStart(2, '0')}</div>
                 <div class="font-semibold text-slate-100 mb-1 drop-shadow">${place.name}</div>
                 <div class="text-xs text-slate-300 line-clamp-2">📍 ${place.location}</div>
-                <div class="mt-2">
-                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${
-                  place.entry?.price
-                  ? 'bg-amber-500/15 text-amber-200 border-amber-400/25'
-                  : 'bg-emerald-500/15 text-emerald-200 border-emerald-400/25'
-                }">
-                ${place.entry?.label || 'Бесплатно'}
-                </span>
-                </div>
+                <div class="mt-2">${renderPlaceEntryBadge(place.entry)}</div>
               </div>
             </button>`;
         }).join('')}
@@ -1252,7 +1252,7 @@ function renderCityPlacePreview(city) {
             <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/20"></div>
             <div class="absolute inset-0 p-3 flex flex-col justify-end">
               <div class="text-sm font-semibold text-slate-100 drop-shadow">${item.category === 'attractions' ? '🏛️' : '✨'} ${item.name}</div>
-              <div class="text-xs text-slate-300">${item.category === 'attractions' ? 'Достопримечательность' : 'Красивое место'} · ${item.entry?.label || 'Бесплатно'}</div>
+              <div class="mt-2 flex flex-wrap items-center gap-2"><span class="text-xs text-slate-300">${item.category === 'attractions' ? 'Достопримечательность' : 'Красивое место'}</span>${renderPlaceEntryBadge(item.entry)}</div>
             </div>
           </button>`).join('')}
       </div>
@@ -1436,7 +1436,7 @@ function openPlaceDetail(city, category, index) {
     </div>
     <h3 class="text-2xl md:text-3xl font-bold mb-3">${place.name}</h3>
     <p class="text-slate-300 mb-3">${place.description}</p>
-    <div class="flex flex-wrap gap-2 mb-5"><span class="text-xs px-3 py-1 rounded-full bg-white/10 border border-white/10 ${place.entry?.price ? 'text-amber-300' : 'text-emerald-300'}">${place.entry?.label || 'Бесплатно'}</span>${typeof tpRenderTags === 'function' ? tpRenderTags({type:'place', city, name:place.name, country:dest?.country, entryPrice:place.entry?.price || 0}) : ''}</div>
+    <div class="flex flex-wrap gap-2 mb-5">${renderPlaceEntryBadge(place.entry, 'md')}${typeof tpRenderTags === 'function' ? tpRenderTags({type:'place', city, name:place.name, country:dest?.country, entryPrice:place.entry?.price || 0}) : ''}</div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
       <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
