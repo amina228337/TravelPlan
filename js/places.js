@@ -1186,7 +1186,15 @@ function renderPlacesCategory(title, icon, items, city, category) {
                 <div class="text-xs text-slate-300/80 mb-1">${String(index + 1).padStart(2, '0')}</div>
                 <div class="font-semibold text-slate-100 mb-1 drop-shadow">${place.name}</div>
                 <div class="text-xs text-slate-300 line-clamp-2">📍 ${place.location}</div>
-                <div class="text-xs ${place.entry?.price ? 'text-amber-300' : 'text-emerald-300'} mt-1 text-center">${place.entry?.label || 'Бесплатно'}</div>
+                <div class="mt-2">
+                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${
+                  place.entry?.price
+                  ? 'bg-amber-500/15 text-amber-200 border-amber-400/25'
+                  : 'bg-emerald-500/15 text-emerald-200 border-emerald-400/25'
+                }">
+                ${place.entry?.label || 'Бесплатно'}
+                </span>
+                </div>
               </div>
             </button>`;
         }).join('')}
