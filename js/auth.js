@@ -91,7 +91,7 @@ function renderLoginRegister(root) {
         <button onclick="${isLogin ? 'loginWithEmail()' : 'registerWithEmail()'}" class="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 font-semibold">${isLogin ? 'Войти' : 'Создать аккаунт'}</button>
         <button onclick="loginWithGoogle()" class="w-full py-3 rounded-xl bg-white/10 border border-white/15 font-semibold hover:bg-white/20 transition">G Войти через Google</button>
       </div>
-      <p class="text-xs text-slate-500 text-center">Если включено подтверждение email, после регистрации Supabase попросит открыть письмо. Потому что даже сайт путешествий обязан заниматься бюрократией.</p>
+      <p class="text-xs text-slate-500 text-center">После регистрации Supabase попросит открыть письмо. Потому что даже сайт путешествий обязан заниматься бюрократией.</p>
     </div>`;
 }
 
