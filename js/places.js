@@ -1146,36 +1146,46 @@ function getPlaceItems(city, category) {
 }
 
 
-function renderPlaceEntryBadge(entry, size = 'sm') {
-  const isPaid = Boolean(entry?.price);
-  const label = entry?.label || 'Бесплатно';
-  const sizeClass = size === 'md'
-    ? 'px-3 py-1.5 text-sm'
-    : 'px-2.5 py-1 text-[11px]';
-  const colorClass = isPaid
-    ? 'bg-amber-500/15 text-amber-200 border-amber-400/25'
-    : 'bg-emerald-500/15 text-emerald-200 border-emerald-400/25';
+function renderPlacePills(activeCity) {
 
-  return `<span class="inline-flex w-fit items-center rounded-full border ${sizeClass} font-semibold shadow-sm backdrop-blur-sm ${colorClass}">${label}</span>`;
 }
 
-function renderPlacePills(activeCity) {
-  const wrap = document.getElementById('places-city-pills');
-  if (!wrap) return;
+function renderPlacesCityDropdown(activeCity) {
+  const list = document.getElementById('places-city-dropdown-list');
+  if (!list) return;
   const allActive = !activeCity || activeCity === '__all__';
-  const allBtn = `<button onclick="openAllPlaces()"
-    class="px-3 py-2 rounded-full text-sm whitespace-nowrap transition ${allActive ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white' : 'bg-white/10 hover:bg-white/20 text-slate-300'}">
+  const allButton = `<button type="button" onclick="openAllPlaces(); closePlacesCityDropdown()"
+    class="text-left px-3 py-2 rounded-xl text-sm transition ${allActive ? 'bg-sky-500 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}">
     ✨ Все места
   </button>`;
-  const cityBtns = getPlacesCityList().map(city => {
-    const d = getPlacesDestination(city);
+  const cityButtons = getPlacesCityList().map(city => {
+    const dest = getPlacesDestination(city);
+    const countryName = dest?.country && PLACES_COUNTRY_NAMES[dest.country] || '';
     const active = city === activeCity;
-    return `<button onclick="openPlacesForCity('${jsString(city)}')"
-      class="px-3 py-2 rounded-full text-sm whitespace-nowrap transition ${active ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white' : 'bg-white/10 hover:bg-white/20 text-slate-300'}">
-      ${d?.emoji || '📍'} ${city}
+    return `<button type="button" onclick="openPlacesForCity('${jsString(city)}'); closePlacesCityDropdown()"
+      class="text-left px-3 py-2 rounded-xl text-sm transition ${active ? 'bg-sky-500 text-white' : 'bg-white/5 hover:bg-white/10 text-slate-300'}">
+      <span class="block font-semibold">${dest?.emoji || '📍'} ${city}</span>
+      <span class="block text-[11px] ${active ? 'text-white/75' : 'text-slate-500'}">${countryName}</span>
     </button>`;
   }).join('');
-  wrap.innerHTML = allBtn + cityBtns;
+  list.innerHTML = allButton + cityButtons;
+}
+
+function togglePlacesCityDropdown() {
+  const panel = document.getElementById('places-city-dropdown');
+  const arrow = document.getElementById('places-city-dropdown-arrow');
+  if (!panel) return;
+  const willOpen = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden', !willOpen);
+  if (arrow) arrow.textContent = willOpen ? '▲' : '▼';
+  if (willOpen) renderPlacesCityDropdown(localStorage.getItem('travelplan_places_city') || '__all__');
+}
+
+function closePlacesCityDropdown() {
+  const panel = document.getElementById('places-city-dropdown');
+  const arrow = document.getElementById('places-city-dropdown-arrow');
+  if (panel) panel.classList.add('hidden');
+  if (arrow) arrow.textContent = '▼';
 }
 
 function renderPlacesCategory(title, icon, items, city, category) {
@@ -1194,7 +1204,7 @@ function renderPlacesCategory(title, icon, items, city, category) {
                 <div class="text-xs text-slate-300/80 mb-1">${String(index + 1).padStart(2, '0')}</div>
                 <div class="font-semibold text-slate-100 mb-1 drop-shadow">${place.name}</div>
                 <div class="text-xs text-slate-300 line-clamp-2">📍 ${place.location}</div>
-                <div class="mt-2">${renderPlaceEntryBadge(place.entry)}</div>
+                <div class="text-xs ${place.entry?.price ? 'text-amber-300' : 'text-emerald-300'} mt-1">${place.entry?.label || 'Бесплатно'}</div>
               </div>
             </button>`;
         }).join('')}
@@ -1252,7 +1262,7 @@ function renderCityPlacePreview(city) {
             <div class="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/20"></div>
             <div class="absolute inset-0 p-3 flex flex-col justify-end">
               <div class="text-sm font-semibold text-slate-100 drop-shadow">${item.category === 'attractions' ? '🏛️' : '✨'} ${item.name}</div>
-              <div class="mt-2 flex flex-wrap items-center gap-2"><span class="text-xs text-slate-300">${item.category === 'attractions' ? 'Достопримечательность' : 'Красивое место'}</span>${renderPlaceEntryBadge(item.entry)}</div>
+              <div class="text-xs text-slate-300">${item.category === 'attractions' ? 'Достопримечательность' : 'Красивое место'} · ${item.entry?.label || 'Бесплатно'}</div>
             </div>
           </button>`).join('')}
       </div>
@@ -1436,8 +1446,6 @@ function openPlaceDetail(city, category, index) {
     </div>
     <h3 class="text-2xl md:text-3xl font-bold mb-3">${place.name}</h3>
     <p class="text-slate-300 mb-3">${place.description}</p>
-    <div class="flex flex-wrap gap-2 mb-5">${renderPlaceEntryBadge(place.entry, 'md')}${typeof tpRenderTags === 'function' ? tpRenderTags({type:'place', city, name:place.name, country:dest?.country, entryPrice:place.entry?.price || 0}) : ''}</div>
-
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
       <div class="bg-white/5 border border-white/10 rounded-2xl p-4">
         <div class="text-xs uppercase tracking-widest text-slate-500 mb-2">Точное место</div>
@@ -1518,6 +1526,9 @@ function initPlaces() {
       const box = document.getElementById('places-suggestions');
       if (!box || !input) return;
       if (!box.contains(event.target) && event.target !== input) hidePlacesSuggestions();
+      const dropdown = document.getElementById('places-city-dropdown');
+      const dropdownBtn = document.getElementById('places-city-dropdown-btn');
+      if (dropdown && dropdownBtn && !dropdown.contains(event.target) && !dropdownBtn.contains(event.target)) closePlacesCityDropdown();
     });
   }
   if (input) input.value = city || '';
