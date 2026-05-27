@@ -3,11 +3,6 @@
 //  Базовые цены в одну сторону, в интерфейсе корректируются по выбранному городу
 // =============================================
 
-// Зачем этот файл:
-// Данные и карточки направлений на главной странице.
-// Комментарии специально оставлены простыми: чтобы через неделю было понятно,
-// что здесь происходит, а не почему JS снова решил устроить квест.
-
 const DESTINATIONS = [
   {
     "id": "almaty",
@@ -1150,20 +1145,68 @@ function filterDestinations(countryCode) {
 
 const TOP3_DESTINATIONS = ['dubai', 'istanbul', 'bangkok'];
 
+function getDestinationReviewStats(dest) {
+  const byId = typeof loadReviews === 'function' ? loadReviews(dest.id) : [];
+  const byCity = typeof loadReviews === 'function' ? loadReviews(dest.city) : [];
+  const reviewsMap = new Map();
+  [...byId, ...byCity].forEach((review, index) => {
+    const key = `${review.date || ''}_${review.author || ''}_${review.rating || ''}_${review.text || ''}_${index}`;
+    reviewsMap.set(key, review);
+  });
+  const reviews = [...reviewsMap.values()].filter(r => Number(r.rating) > 0);
+  const count = reviews.length;
+  const avg = count ? reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / count : 0;
+  return { count, avg };
+}
+
+function getTopReviewedDestinations(fromCity) {
+  const candidates = DESTINATIONS
+    .filter(d => d.city !== fromCity)
+    .map((d, index) => {
+      const stats = getDestinationReviewStats(d);
+      const fallbackRank = TOP3_DESTINATIONS.includes(d.id) ? (100 - TOP3_DESTINATIONS.indexOf(d.id)) : 0;
+      return { ...d, _reviewAvg: stats.avg, _reviewCount: stats.count, _fallbackRank: fallbackRank, _originalIndex: index };
+    });
+
+  const hasReviews = candidates.some(d => d._reviewCount > 0);
+  return candidates
+    .sort((a, b) => {
+      if (hasReviews) {
+        return (b._reviewAvg - a._reviewAvg)
+          || (b._reviewCount - a._reviewCount)
+          || (b._fallbackRank - a._fallbackRank)
+          || (a._originalIndex - b._originalIndex);
+      }
+      return (b._fallbackRank - a._fallbackRank) || (a._originalIndex - b._originalIndex);
+    })
+    .slice(0, 3);
+}
+
+function renderTopDirectionMeta(dest) {
+  if (dest._reviewCount > 0) {
+    return `<span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-500/15 text-amber-200 border border-amber-400/25 backdrop-blur-sm">★ ${dest._reviewAvg.toFixed(1)} · ${dest._reviewCount} отзывов</span>`;
+  }
+  return `<span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-white/10 text-slate-200 border border-white/10 backdrop-blur-sm">пока без отзывов</span>`;
+}
+
 /**
- * Рендерит только топ-3 направления на главной странице.
+ * Рендерит топ-3 направления на главной странице.
+ * Сначала идут направления с самой высокой средней оценкой, потом с большим количеством отзывов.
+ * Если отзывов ещё нет, оставляем красивые стартовые направления, чтобы блок не пустовал.
  */
 function renderTop3Destinations() {
-  const items = DESTINATIONS.filter(d => TOP3_DESTINATIONS.includes(d.id));
   const grid = document.getElementById('destinations-grid');
   if (!grid) return;
 
   const fromCity = (typeof getUserCity === 'function') ? getUserCity().name : 'Алматы';
+  const items = getTopReviewedDestinations(fromCity);
   const subtitle = document.getElementById('top-directions-subtitle');
-  if (subtitle) subtitle.textContent = `Самые популярные у путешественников из города ${fromCity} · данные Aviasales.kz`;
-  grid.innerHTML = items.filter(d => d.city !== fromCity).map(d => {
+  if (subtitle) subtitle.textContent = `Рекомендуемые направления по рейтингу и отзывам путешественников из города ${fromCity}`;
+
+  grid.innerHTML = items.map((d, placeIndex) => {
     const tagClass = TAG_COLORS[d.tagColor] || TAG_COLORS.sky;
     const displayPrice = getDisplayFlightPrice(d);
+    const topLabel = placeIndex === 0 && d._reviewCount > 0 ? 'Лидер отзывов' : d.tag;
     return `
       <div class="destination-card card-gradient rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer"
            onclick="openCityModal('${d.id}')">
@@ -1171,14 +1214,17 @@ function renderTop3Destinations() {
           <img src="${destinationImageUrl(d)}" onerror="${destinationImageOnError(d)}" alt="Фото города ${d.city}" class="w-full h-full object-cover">
           <div class="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent"></div>
           <span class="absolute left-4 bottom-4 text-xl font-bold text-white drop-shadow">${d.city}</span>
-          <span class="absolute top-3 right-3 text-xs ${tagClass} px-2 py-1 rounded-full backdrop-blur-sm">${d.tag}</span>
+          <div class="absolute top-3 right-3 flex flex-col items-end gap-2">
+            <span class="text-xs ${tagClass} px-2 py-1 rounded-full backdrop-blur-sm">${topLabel}</span>
+            ${renderTopDirectionMeta(d)}
+          </div>
         </div>
         <div class="p-5">
           <h3 class="text-xl font-bold mb-1">${d.city}</h3>
           <p class="text-slate-400 text-sm mb-3">${d.desc}</p>
           ${typeof tpRenderBadges === 'function' ? tpRenderBadges({...d, type:'flight', price:getDisplayFlightPrice(d)}) : ''}
           <div class="flex items-center justify-between mt-3">
-            <span class="text-sky-400 font-semibold">${getDisplayFlightPrice(d) ? 'от ' + getDisplayFlightPrice(d).toLocaleString() + ' ₸' : 'вы уже здесь'}</span>
+            <span class="text-sky-400 font-semibold">${displayPrice ? 'от ' + displayPrice.toLocaleString() + ' ₸' : 'вы уже здесь'}</span>
             <span class="text-xs text-slate-500">Из города ${fromCity} →</span>
           </div>
         </div>
