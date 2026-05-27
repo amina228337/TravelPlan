@@ -1,4 +1,3 @@
-<!-- Зачем этот файл: Страница интересных мест по городам. -->
 <!-- ===== PLACES ===== -->
   <section id="places-section" class="px-6 py-12 hidden">
     <div class="max-w-6xl mx-auto">
@@ -12,6 +11,19 @@
             class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none">
           <div id="places-suggestions" class="autocomplete-list hidden"></div>
         </div>
+
+        <div class="mt-4">
+          <button id="places-city-dropdown-btn" type="button" onclick="togglePlacesCityDropdown()"
+            class="w-full md:w-auto px-4 py-2.5 rounded-xl bg-white/10 border border-white/10 hover:bg-white/15 transition text-sm font-semibold flex items-center justify-between gap-3">
+            <span>🌍 Выбрать город из полного списка</span>
+            <span id="places-city-dropdown-arrow" class="text-sky-300 transition">▼</span>
+          </button>
+          <div id="places-city-dropdown" class="hidden mt-3 rounded-2xl border border-white/10 bg-slate-900/95 p-3 shadow-2xl">
+            <div class="text-xs text-slate-500 mb-2 uppercase tracking-widest">Все города</div>
+            <div id="places-city-dropdown-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 max-h-72 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+
         <div id="places-city-pills" class="places-pills flex gap-2 overflow-x-auto pt-4 pb-1"></div>
       </div>
 
