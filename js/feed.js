@@ -5704,6 +5704,7 @@ function saveLocalFeedReview(key, review) {
     const raw = localStorage.getItem(FEED_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
     if (!all[key]) all[key] = [];
+    all[key] = (all[key] || []).filter(r => !(typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(r)));
     all[key].unshift(review);
     localStorage.setItem(FEED_REVIEWS_KEY, JSON.stringify(all));
   } catch {}
@@ -5738,7 +5739,8 @@ async function saveFeedReview(key, review) {
         comment: review.text || null,
         imageUrl: review.imageUrl || null
       });
-      saveLocalFeedReview(key, { ...review, id: saved?.id || review.id });
+      // Успешный Supabase-отзыв НЕ дублируем в localStorage.
+      removeLocalFeedReview(key, review.id);
       return saved;
     } catch (err) {
       if (err?.code === 'REVIEW_EXISTS') throw err;
