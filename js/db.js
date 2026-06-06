@@ -32,24 +32,12 @@ async function dbTestConnection() {
 }
 
 // ── Reviews ────────────────────────────────────────────────────────────────
+// Важно: отзывы теперь живут по одному правилу:
+// 1 объект + 1 владелец = 1 отзыв.
+// Владелец = auth.uid() для аккаунта или стабильный guest-id для гостя.
+// Старые локальные дубли больше не зеркалим поверх Supabase, потому что именно так рождаются два отзыва из одного клика.
 
-async function dbGetReviews(entityType, entityId) {
-  if (!isSupabaseReady()) return [];
-
-  const { data, error } = await supabaseClient
-    .from('reviews')
-    .select('*')
-    .eq('entity_type', entityType)
-    .eq('entity_id', entityId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Ошибка загрузки отзывов:', error.message);
-    return [];
-  }
-
-  return data || [];
-}
+window.travelplanReviewsCache = window.travelplanReviewsCache || { loaded: false, rows: [] };
 
 function tpGetCurrentReviewUserId() {
   return window.travelplanCurrentUser?.id || null;
@@ -74,7 +62,7 @@ function tpGetGuestReviewId() {
 }
 
 function tpGetCurrentReviewOwnerKey() {
-  return tpGetCurrentReviewUserId() || tpGetGuestReviewId();
+  return String(tpGetCurrentReviewUserId() || tpGetGuestReviewId());
 }
 
 function tpCurrentAuthorNames() {
@@ -89,30 +77,46 @@ function tpCurrentAuthorNames() {
   ].filter(Boolean).map(tpNormalizeOwnerText);
 }
 
+function tpReviewOwnerKey(review = {}) {
+  return String(
+    review.owner_key || review.ownerKey ||
+    review.userId || review.user_id ||
+    review._localUserId || review.guest_id || review.guestId ||
+    ''
+  ).trim();
+}
+
 function tpReviewBelongsToCurrentUser(review) {
   if (!review) return false;
 
   const currentUserId = tpGetCurrentReviewUserId();
+  const currentOwnerKey = tpGetCurrentReviewOwnerKey();
   const reviewUserId = String(review.userId || review.user_id || '').trim();
-  const localOwner = String(review._localUserId || review.guest_id || review.guestId || '').trim();
+  const reviewOwnerKey = tpReviewOwnerKey(review);
 
   if (currentUserId && reviewUserId && reviewUserId === String(currentUserId)) return true;
-  if (!currentUserId && localOwner && localOwner === tpGetGuestReviewId()) return true;
-  if (currentUserId && localOwner && localOwner === String(currentUserId)) return true;
+  if (reviewOwnerKey && reviewOwnerKey === currentOwnerKey) return true;
 
-  // Legacy-отзывы, которые были сохранены раньше без user_id.
-  // Для них разрешаем управление, если имя автора совпадает с текущим профилем.
-  // Это нужно, чтобы старые отзывы Амины не становились бессмертными тараканами в Supabase.
-  if (currentUserId && !reviewUserId) {
+  // Legacy-отзывы, созданные до owner_key/user_id. Разрешаем управлять ими только вошедшему пользователю,
+  // если имя автора совпадает с текущим профилем. Это нужно для старых отзывов, а не для нормальной жизни.
+  if (currentUserId && !reviewUserId && !reviewOwnerKey) {
     const author = tpNormalizeOwnerText(review.author || review.author_name);
     if (author && tpCurrentAuthorNames().includes(author)) return true;
+    // Старые отзывы могли уйти в Supabase как «Гость», хотя человек уже потом вошёл в аккаунт.
+    // Даём удалить такие legacy-строки руками из интерфейса, иначе они становятся мусором без хозяина.
+    if (!author || author === 'гость' || author === 'guest') return true;
+  }
+
+  if (!currentUserId && !reviewUserId && !reviewOwnerKey) {
+    const author = tpNormalizeOwnerText(review.author || review.author_name);
+    if (!author || author === 'гость' || author === 'guest') return true;
   }
 
   return false;
 }
 
 function tpHasOwnReview(reviews = []) {
-  return Array.isArray(reviews) && reviews.some(tpReviewBelongsToCurrentUser);
+  return Array.isArray(reviews) && reviews.some(r => !tpIsReviewDeleted(r) && tpReviewBelongsToCurrentUser(r));
 }
 
 const TP_DELETED_REVIEWS_KEY = 'travelplan_deleted_review_ids';
@@ -146,122 +150,6 @@ function tpForgetReviewDeleted(reviewOrId) {
   } catch {}
 }
 
-async function dbAddReview({ entityType, entityId, city, country, authorName, rating, comment, imageUrl }) {
-  if (!isSupabaseReady()) throw new Error('Supabase не подключён');
-
-  const currentUserId = tpGetCurrentReviewUserId();
-  if (!currentUserId) {
-    const authError = new Error('Чтобы оставить отзыв, нужно войти в аккаунт');
-    authError.code = 'AUTH_REQUIRED';
-    throw authError;
-  }
-
-  // Один пользователь — один отзыв на один объект. Удалил отзыв — можно написать новый.
-  const { data: existing, error: existingError } = await supabaseClient
-    .from('reviews')
-    .select('id')
-    .eq('entity_type', entityType)
-    .eq('entity_id', entityId)
-    .eq('user_id', currentUserId)
-    .limit(1);
-
-  if (!existingError && existing && existing.some(row => !tpIsReviewDeleted(row.id))) {
-    const duplicateError = new Error('Вы уже оставили отзыв для этого объекта. Сначала удалите старый отзыв.');
-    duplicateError.code = 'REVIEW_EXISTS';
-    throw duplicateError;
-  }
-
-  const cachedOwnReview = tpGetCachedReviews(entityType, entityId).find(tpReviewBelongsToCurrentUser);
-  if (cachedOwnReview && !tpIsReviewDeleted(cachedOwnReview)) {
-    const duplicateError = new Error('Вы уже оставили отзыв для этого объекта. Сначала удалите старый отзыв.');
-    duplicateError.code = 'REVIEW_EXISTS';
-    throw duplicateError;
-  }
-
-  const { data, error } = await supabaseClient
-    .from('reviews')
-    .insert({
-      entity_type: entityType,
-      entity_id: entityId,
-      city: city || null,
-      country: country || null,
-      user_id: currentUserId,
-      author_name: authorName,
-      rating: Number(rating),
-      comment: comment?.trim() || null,
-      image_url: imageUrl || null
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Ошибка добавления отзыва:', error.message);
-    throw error;
-  }
-
-  // Сразу обновляем общий кэш, чтобы карточки не ждали перезагрузки страницы.
-  if (data) {
-    window.travelplanReviewsCache = window.travelplanReviewsCache || { loaded: false, rows: [] };
-    window.travelplanReviewsCache.rows = [data, ...(window.travelplanReviewsCache.rows || [])];
-    window.travelplanReviewsCache.loaded = true;
-    window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
-  }
-
-  return data;
-}
-
-async function dbDeleteReview(reviewOrId) {
-  if (!isSupabaseReady()) throw new Error('Supabase не подключён');
-  const id = typeof reviewOrId === 'string' ? reviewOrId : (reviewOrId?.id || reviewOrId?.review_id);
-  if (!id) return true;
-
-  // Локальные отзывы удаляются только из localStorage, а Supabase-отзывы — из базы.
-  // Не добавляем .eq('user_id', currentUserId), потому что старые отзывы могли быть созданы без user_id.
-  // Иначе delete тихо удаляет 0 строк, а после перезагрузки отзыв воскресает, как баг накануне защиты.
-  if (!String(id).startsWith('local_')) {
-    const { data, error } = await supabaseClient
-      .from('reviews')
-      .delete()
-      .eq('id', id)
-      .select('id');
-
-    if (error) {
-      console.error('Ошибка удаления отзыва:', error.message);
-      throw error;
-    }
-
-    // Если RLS не дал удалить старую строку, хотя UI уже считает отзыв вашим,
-    // прячем её локально, чтобы она не возвращалась после перезагрузки в этом браузере.
-    if (!data || data.length === 0) {
-      console.warn('Supabase не удалил строку отзыва. Скрываю отзыв локально:', id);
-      tpMarkReviewDeleted(id);
-    } else {
-      tpMarkReviewDeleted(id);
-    }
-  } else {
-    tpMarkReviewDeleted(id);
-  }
-
-  if (window.travelplanReviewsCache?.rows) {
-    window.travelplanReviewsCache.rows = window.travelplanReviewsCache.rows.filter(row => String(row.id) !== String(id));
-    window.travelplanReviewsCache.loaded = true;
-  }
-
-  window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
-  return true;
-}
-
-function calcAverageRating(reviews) {
-  if (!reviews || reviews.length === 0) return null;
-  const sum = reviews.reduce((acc, item) => acc + Number(item.rating || 0), 0);
-  return Math.round((sum / reviews.length) * 10) / 10;
-}
-
-// ── Общий кэш отзывов из Supabase ─────────────────────────────────────────
-// Карточки билетов, направлений, отелей и мест должны читать одни и те же отзывы.
-// Раньше часть сайта брала localStorage, а часть писала в Supabase. Получался цирк с разными реальностями.
-window.travelplanReviewsCache = window.travelplanReviewsCache || { loaded: false, rows: [] };
-
 function tpNormalizeReviewEntityId(value) {
   const raw = String(value || '').trim();
   const lower = raw.toLowerCase();
@@ -283,6 +171,9 @@ function tpNormalizeReviewEntityId(value) {
 }
 
 function tpGetAvatarForReviewAuthor(rowOrReview) {
+  const direct = rowOrReview?.avatar_url || rowOrReview?.avatarUrl || rowOrReview?.author_avatar_url || rowOrReview?.authorAvatar || '';
+  if (direct) return direct;
+
   const reviewUserId = String(rowOrReview?.user_id || rowOrReview?.userId || '').trim();
   const currentUserId = tpGetCurrentReviewUserId();
   const currentAvatar = typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : '';
@@ -309,23 +200,66 @@ function tpReviewRowToAppReview(row) {
     imageUrl: row?.image_url || row?.imageUrl || '',
     avatarUrl: row?.avatar_url || row?.avatarUrl || tpGetAvatarForReviewAuthor(row) || '',
     userId: row?.user_id || row?.userId || '',
+    owner_key: row?.owner_key || row?.ownerKey || '',
     date: readableDate,
-    _source: 'supabase',
-    _entityType: row?.entity_type || '',
-    _entityId: row?.entity_id || ''
+    _source: row?._source || 'supabase',
+    _localUserId: row?._localUserId || row?.owner_key || row?.ownerKey || '',
+    _entityType: row?.entity_type || row?._entityType || '',
+    _entityId: row?.entity_id || row?._entityId || ''
   };
 }
 
+function tpReviewSignature(review = {}) {
+  const text = String(review.text || review.comment || '').trim().toLowerCase();
+  const image = String(review.imageUrl || review.image_url || '').trim().toLowerCase();
+  const rating = String(Number(review.rating || 0));
+  const owner = tpReviewOwnerKey(review) || (tpReviewBelongsToCurrentUser(review) ? tpGetCurrentReviewOwnerKey() : '');
+  if (owner) return `owner_${owner}_${rating}_${text}_${image}`;
+  // Для старых локальных дублей без owner_key. Не схлопываем всех гостей просто по слову «Гость», только по полному контенту.
+  return `legacy_${tpNormalizeOwnerText(review.author || review.author_name)}_${rating}_${text}_${image}`;
+}
+
 function tpMergeReviews(localReviews = [], supabaseReviews = []) {
-  const map = new Map();
-  [...supabaseReviews, ...localReviews].forEach((review, index) => {
-    const key = review.id
-      ? `id_${review.id}`
-      : `${review.author || ''}_${review.rating || ''}_${review.text || ''}_${review.date || ''}_${review.imageUrl || ''}_${index}`;
-    if (map.has(key)) map.set(key, { ...map.get(key), ...review, _source: map.get(key)._source || review._source });
-    else map.set(key, review);
-  });
-  return [...map.values()].filter(r => Number(r.rating || 0) > 0 && !tpIsReviewDeleted(r));
+  const byId = new Map();
+  const bySignature = new Map();
+  const ordered = [...supabaseReviews, ...localReviews]
+    .map(r => ({ ...r, rating: Number(r.rating || 0) }))
+    .filter(r => r.rating > 0 && !tpIsReviewDeleted(r));
+
+  for (const review of ordered) {
+    const id = String(review.id || '').trim();
+    const sig = tpReviewSignature(review);
+
+    if (id && byId.has(id)) {
+      const existing = byId.get(id);
+      Object.assign(existing, { ...review, ...existing, avatarUrl: existing.avatarUrl || review.avatarUrl });
+      continue;
+    }
+
+    if (sig && bySignature.has(sig)) {
+      const existing = bySignature.get(sig);
+      Object.assign(existing, { ...review, ...existing, avatarUrl: existing.avatarUrl || review.avatarUrl });
+      if (id) byId.set(id, existing);
+      continue;
+    }
+
+    bySignature.set(sig, review);
+    if (id) byId.set(id, review);
+  }
+
+  // Если у текущего пользователя/гостя почему-то остались два отзыва на один объект,
+  // показываем только самый свежий Supabase-вариант. Лимит должен чиниться в базе, но UI тоже не обязан плодить шизу.
+  const result = [];
+  let ownAlreadyShown = false;
+  for (const review of [...bySignature.values()]) {
+    if (tpReviewBelongsToCurrentUser(review)) {
+      if (ownAlreadyShown) continue;
+      ownAlreadyShown = true;
+    }
+    result.push(review);
+  }
+
+  return result;
 }
 
 function tpGetCachedReviews(entityType, entityId) {
@@ -340,9 +274,7 @@ function tpGetCachedReviews(entityType, entityId) {
       const rowType = String(row.entity_type || '').trim().toLowerCase();
       const rowId = String(row.entity_id || '').trim();
       const rowNorm = tpNormalizeReviewEntityId(rowId);
-      if (wantedType === 'destination') {
-        return rowType === 'destination' && (rowId === wantedId || rowNorm === wantedNorm);
-      }
+      if (wantedType === 'destination') return rowType === 'destination' && (rowId === wantedId || rowNorm === wantedNorm);
       return rowType === wantedType && (rowId === wantedId || rowNorm === wantedNorm);
     })
     .map(tpReviewRowToAppReview);
@@ -368,6 +300,178 @@ async function dbLoadReviewCache() {
   window.travelplanReviewsCache = { loaded: true, rows: (data || []).filter(row => !tpIsReviewDeleted(row)) };
   window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
   return data || [];
+}
+
+async function dbGetReviews(entityType, entityId) {
+  if (!isSupabaseReady()) return [];
+
+  const { data, error } = await supabaseClient
+    .from('reviews')
+    .select('*')
+    .eq('entity_type', entityType)
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Ошибка загрузки отзывов:', error.message);
+    return [];
+  }
+
+  return data || [];
+}
+
+async function dbFindOwnReview(entityType, entityId) {
+  if (!isSupabaseReady()) return null;
+  const ownerKey = tpGetCurrentReviewOwnerKey();
+  const userId = tpGetCurrentReviewUserId();
+
+  // Новый нормальный путь: owner_key. Для этого надо применить SQL из supabase_reviews_owner_fix.sql.
+  try {
+    const { data, error } = await supabaseClient
+      .from('reviews')
+      .select('*')
+      .eq('entity_type', entityType)
+      .eq('entity_id', entityId)
+      .eq('owner_key', ownerKey)
+      .limit(1);
+    if (!error && Array.isArray(data) && data.length) return data[0];
+  } catch {}
+
+  // Legacy: отзывы аккаунтов до owner_key.
+  if (userId) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('reviews')
+        .select('*')
+        .eq('entity_type', entityType)
+        .eq('entity_id', entityId)
+        .eq('user_id', userId)
+        .limit(1);
+      if (!error && Array.isArray(data) && data.length) return data[0];
+    } catch {}
+  }
+
+  return null;
+}
+
+async function dbAddReview({ entityType, entityId, city, country, authorName, rating, comment, imageUrl }) {
+  if (!isSupabaseReady()) throw new Error('Supabase не подключён');
+
+  const currentUserId = tpGetCurrentReviewUserId();
+  const ownerKey = tpGetCurrentReviewOwnerKey();
+  const avatarUrl = typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : '';
+
+  // Проверка в кэше + базе. Удалил отзыв — его уже нет в базе/кэше, значит новый можно.
+  const cachedOwnReview = tpGetCachedReviews(entityType, entityId).find(tpReviewBelongsToCurrentUser);
+  if (cachedOwnReview && !tpIsReviewDeleted(cachedOwnReview)) {
+    const duplicateError = new Error('Вы уже оставили отзыв для этого объекта. Сначала удалите старый отзыв.');
+    duplicateError.code = 'REVIEW_EXISTS';
+    throw duplicateError;
+  }
+
+  const existing = await dbFindOwnReview(entityType, entityId);
+  if (existing && !tpIsReviewDeleted(existing)) {
+    const duplicateError = new Error('Вы уже оставили отзыв для этого объекта. Сначала удалите старый отзыв.');
+    duplicateError.code = 'REVIEW_EXISTS';
+    throw duplicateError;
+  }
+
+  const basePayload = {
+    entity_type: entityType,
+    entity_id: entityId,
+    city: city || null,
+    country: country || null,
+    user_id: currentUserId,
+    author_name: authorName || 'Гость',
+    rating: Number(rating),
+    comment: comment?.trim() || null,
+    image_url: imageUrl || null,
+    avatar_url: avatarUrl || null,
+    owner_key: ownerKey
+  };
+
+  let result = await supabaseClient
+    .from('reviews')
+    .insert(basePayload)
+    .select()
+    .single();
+
+  // Если owner_key/avatar_url ещё не добавлены в Supabase, авторизованным пользователям пробуем старую схему.
+  // Гостям без owner_key писать в Supabase нельзя: потом невозможно честно ограничить и удалить их отзыв.
+  if (result.error && String(result.error.message || '').toLowerCase().includes('owner_key')) {
+    if (!currentUserId) {
+      const schemaError = new Error('В Supabase не добавлен столбец owner_key. Выполните SQL-файл supabase_reviews_owner_fix.sql.');
+      schemaError.code = 'SCHEMA_MISSING_OWNER_KEY';
+      throw schemaError;
+    }
+    const legacyPayload = { ...basePayload };
+    delete legacyPayload.owner_key;
+    delete legacyPayload.avatar_url;
+    result = await supabaseClient.from('reviews').insert(legacyPayload).select().single();
+  }
+
+  if (result.error) {
+    if (String(result.error.message || '').toLowerCase().includes('duplicate') || result.error.code === '23505') {
+      const duplicateError = new Error('Вы уже оставили отзыв для этого объекта. Сначала удалите старый отзыв.');
+      duplicateError.code = 'REVIEW_EXISTS';
+      throw duplicateError;
+    }
+    console.error('Ошибка добавления отзыва:', result.error.message);
+    throw result.error;
+  }
+
+  const data = result.data;
+  if (data) {
+    window.travelplanReviewsCache = window.travelplanReviewsCache || { loaded: false, rows: [] };
+    const rows = (window.travelplanReviewsCache.rows || []).filter(row => String(row.id) !== String(data.id));
+    window.travelplanReviewsCache.rows = [data, ...rows];
+    window.travelplanReviewsCache.loaded = true;
+    window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
+  }
+
+  return data;
+}
+
+async function dbDeleteReview(reviewOrId) {
+  if (!isSupabaseReady()) throw new Error('Supabase не подключён');
+  const id = typeof reviewOrId === 'string' ? reviewOrId : (reviewOrId?.id || reviewOrId?.review_id);
+  if (!id) return true;
+
+  if (String(id).startsWith('local_')) {
+    tpMarkReviewDeleted(id);
+    window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
+    return true;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('reviews')
+    .delete()
+    .eq('id', id)
+    .select('id');
+
+  if (error) {
+    console.error('Ошибка удаления отзыва:', error.message);
+    throw new Error('Supabase не разрешил удалить отзыв. Проверьте RLS policies из SQL-патча.');
+  }
+
+  if (!data || data.length === 0) {
+    throw new Error('Отзыв не удалился из Supabase. Проверьте owner_key и RLS policies.');
+  }
+
+  tpMarkReviewDeleted(id);
+  if (window.travelplanReviewsCache?.rows) {
+    window.travelplanReviewsCache.rows = window.travelplanReviewsCache.rows.filter(row => String(row.id) !== String(id));
+    window.travelplanReviewsCache.loaded = true;
+  }
+
+  window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
+  return true;
+}
+
+function calcAverageRating(reviews) {
+  if (!reviews || reviews.length === 0) return null;
+  const sum = reviews.reduce((acc, item) => acc + Number(item.rating || 0), 0);
+  return Math.round((sum / reviews.length) * 10) / 10;
 }
 
 // ── Bookings ───────────────────────────────────────────────────────────────
