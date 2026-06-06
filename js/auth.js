@@ -114,20 +114,51 @@ function setAuthError(message = '') {
   box.classList.remove('hidden');
 }
 
+function normalizeAuthEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function rememberKnownAuthEmail(email) {
+  const normalized = normalizeAuthEmail(email);
+  if (!normalized) return;
+  try {
+    const key = 'travelplan_known_auth_emails';
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const set = new Set(list.map(normalizeAuthEmail).filter(Boolean));
+    set.add(normalized);
+    localStorage.setItem(key, JSON.stringify([...set]));
+  } catch {}
+}
+
+function isKnownAuthEmail(email) {
+  const normalized = normalizeAuthEmail(email);
+  if (!normalized) return false;
+  try {
+    const list = JSON.parse(localStorage.getItem('travelplan_known_auth_emails') || '[]');
+    return list.map(normalizeAuthEmail).includes(normalized);
+  } catch { return false; }
+}
+
 async function isEmailRegisteredInProfiles(email) {
-  if (!email || !window.supabaseClient) return false;
+  const normalized = normalizeAuthEmail(email);
+  if (!normalized || !window.supabaseClient) return isKnownAuthEmail(normalized) ? true : null;
+  if (isKnownAuthEmail(normalized)) return true;
+
   try {
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('id')
-      .ilike('email', email)
-      .maybeSingle();
+      .select('id,email')
+      .ilike('email', normalized)
+      .limit(1);
 
     if (error) {
       console.warn('Не удалось проверить email в profiles:', error.message);
       return null;
     }
-    return Boolean(data?.id);
+
+    const found = Array.isArray(data) && data.length > 0;
+    if (found) rememberKnownAuthEmail(normalized);
+    return found;
   } catch (e) {
     console.warn('Проверка email сломалась:', e?.message || e);
     return null;
@@ -310,6 +341,7 @@ async function registerWithEmail() {
     options: { data: { full_name: name || email.split('@')[0] } }
   });
   if (error) return showToast(error.message, 'error');
+  rememberKnownAuthEmail(email);
   showToast(data?.session ? 'Аккаунт создан' : 'Аккаунт создан. Проверьте email, если включено подтверждение.');
   await refreshAuthState();
   renderAuthModal();
@@ -339,7 +371,7 @@ async function loginWithEmail() {
     // есть профиль -> пароль не подходит; нет профиля -> предлагаем регистрацию.
     const registered = await isEmailRegisteredInProfiles(email);
 
-    if (registered === true) {
+    if (registered === true || isKnownAuthEmail(email)) {
       setAuthError('Неверный пароль для этого аккаунта. Проверьте пароль и попробуйте ещё раз.');
       showToast('Неверный пароль', 'error');
       return;
@@ -352,12 +384,14 @@ async function loginWithEmail() {
       return;
     }
 
-    // Если RLS/сеть не дали проверить profiles, не кидаем человека в регистрацию вслепую.
-    setAuthError('Не удалось войти: проверьте email и пароль. Если аккаунта нет, перейдите во вкладку регистрации.');
+    // Если Supabase/RLS скрывает наличие email, не кидаем человека в регистрацию вслепую.
+    // Это важнее, чем красивый автопереход: иначе неверный пароль выглядит как «создай аккаунт заново».
+    setAuthError('Неверный пароль или аккаунт не найден. Проверьте данные. Если аккаунта точно нет — откройте вкладку регистрации.');
     showToast('Проверьте email и пароль', 'error');
     return;
   }
 
+  rememberKnownAuthEmail(email);
   showToast('Вы вошли в аккаунт');
   await refreshAuthState({ skipBookings: false });
   renderAuthModal();
