@@ -1271,11 +1271,20 @@ function renderPersonalSection() {
 const REVIEWS_KEY = 'travelplan_reviews';
 
 function loadReviews(cityId) {
+  let localReviews = [];
   try {
     const raw = localStorage.getItem(REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    return all[cityId] || [];
-  } catch { return []; }
+    localReviews = all[cityId] || [];
+  } catch { localReviews = []; }
+
+  const supabaseReviews = typeof tpGetCachedReviews === 'function'
+    ? tpGetCachedReviews('destination', cityId)
+    : [];
+
+  return typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(localReviews, supabaseReviews)
+    : [...supabaseReviews, ...localReviews];
 }
 
 function saveReview(cityId, review) {
