@@ -1318,11 +1318,20 @@ function getPlaceReviewKey(city, placeName) {
 }
 
 function loadPlaceReviews(key) {
+  let localReviews = [];
   try {
     const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    return all[key] || [];
-  } catch { return []; }
+    localReviews = all[key] || [];
+  } catch { localReviews = []; }
+
+  const supabaseReviews = typeof tpGetCachedReviews === 'function'
+    ? tpGetCachedReviews('place', key)
+    : [];
+
+  return typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(localReviews, supabaseReviews)
+    : [...supabaseReviews, ...localReviews];
 }
 
 function savePlaceReview(key, review, city, country, placeName) {
