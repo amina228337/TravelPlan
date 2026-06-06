@@ -1292,6 +1292,7 @@ function saveLocalDestinationReview(cityId, review) {
     const raw = localStorage.getItem(REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
     if (!all[cityId]) all[cityId] = [];
+    all[cityId] = (all[cityId] || []).filter(r => !(typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(r)));
     all[cityId].unshift(review);
     localStorage.setItem(REVIEWS_KEY, JSON.stringify(all));
   } catch {}
@@ -1320,7 +1321,8 @@ async function saveReview(cityId, review) {
         comment: review.text || null,
         imageUrl: review.imageUrl || null
       });
-      saveLocalDestinationReview(cityId, { ...review, id: saved?.id || review.id });
+      // Успешный Supabase-отзыв НЕ дублируем в localStorage. Иначе один отзыв превращается в два, потому что браузер, конечно, решил помочь.
+      removeLocalDestinationReview(cityId, review.id);
       return saved;
     } catch (err) {
       if (err?.code === 'REVIEW_EXISTS') throw err;
