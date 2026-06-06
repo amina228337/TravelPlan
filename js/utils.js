@@ -1536,7 +1536,12 @@ function tpReviewInitials(name) {
 }
 
 function getReviewAvatarUrl(review) {
-  return review?.avatarUrl || review?.authorAvatar || review?.avatar_url || review?.author_avatar_url || '';
+  const direct = review?.avatarUrl || review?.authorAvatar || review?.avatar_url || review?.author_avatar_url || '';
+  if (direct) return direct;
+  if (typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(review)) {
+    return typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : '';
+  }
+  return '';
 }
 
 function renderReviewAvatar(review, sizeClass = 'w-9 h-9') {
@@ -1553,7 +1558,7 @@ function renderReviewAvatar(review, sizeClass = 'w-9 h-9') {
   return `
     <span class="relative ${sizeClass} shrink-0 inline-flex">
       <img src="${safeAvatar}" alt="Аватар ${safeAuthor}" class="${sizeClass} rounded-full object-cover border border-white/10 shrink-0" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
-      <span class="hidden absolute inset-0 rounded-full bg-sky-500/15 border border-sky-400/20 items-center justify-center text-xs font-bold text-sky-200">${initials}</span>
+      <span class="hidden absolute inset-0 rounded-full bg-sky-500/15 border border-sky-400/20 inline-flex items-center justify-center text-xs font-bold text-sky-200">${initials}</span>
     </span>`;
 }
 
