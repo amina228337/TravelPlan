@@ -1159,9 +1159,8 @@ function getDestinationReviewStats(dest) {
   return { count, avg };
 }
 
-function getTopReviewedDestinations(fromCity) {
+function getTopReviewedDestinations() {
   const candidates = DESTINATIONS
-    .filter(d => d.city !== fromCity)
     .map((d, index) => {
       const stats = getDestinationReviewStats(d);
       const fallbackRank = TOP3_DESTINATIONS.includes(d.id) ? (100 - TOP3_DESTINATIONS.indexOf(d.id)) : 0;
@@ -1172,8 +1171,8 @@ function getTopReviewedDestinations(fromCity) {
   return candidates
     .sort((a, b) => {
       if (hasReviews) {
-        return (b._reviewAvg - a._reviewAvg)
-          || (b._reviewCount - a._reviewCount)
+        return (b._reviewCount - a._reviewCount)
+          || (b._reviewAvg - a._reviewAvg)
           || (b._fallbackRank - a._fallbackRank)
           || (a._originalIndex - b._originalIndex);
       }
@@ -1190,8 +1189,8 @@ function renderTopDirectionMeta(dest) {
 }
 
 /**
- * Рендерит топ-3 направления на главной странице.
- * Сначала идут направления с самой высокой средней оценкой, потом с большим количеством отзывов.
+ * Рендерит топ-3 предложения на главной странице.
+ * Сначала идут предложения с большим количеством отзывов, потом с высокой средней оценкой.
  * Если отзывов ещё нет, оставляем красивые стартовые направления, чтобы блок не пустовал.
  */
 function renderTop3Destinations() {
@@ -1199,9 +1198,9 @@ function renderTop3Destinations() {
   if (!grid) return;
 
   const fromCity = (typeof getUserCity === 'function') ? getUserCity().name : 'Алматы';
-  const items = getTopReviewedDestinations(fromCity);
+  const items = getTopReviewedDestinations();
   const subtitle = document.getElementById('top-directions-subtitle');
-  if (subtitle) subtitle.textContent = `Рекомендуемые направления по рейтингу и отзывам путешественников из города ${fromCity}`;
+  if (subtitle) subtitle.textContent = 'Предложения с наибольшим количеством отзывов и высокой оценкой путешественников';
 
   grid.innerHTML = items.map((d, placeIndex) => {
     const tagClass = TAG_COLORS[d.tagColor] || TAG_COLORS.sky;
@@ -1225,7 +1224,7 @@ function renderTop3Destinations() {
           ${typeof tpRenderBadges === 'function' ? tpRenderBadges({...d, type:'flight', price:getDisplayFlightPrice(d)}) : ''}
           <div class="flex items-center justify-between mt-3">
             <span class="text-sky-400 font-semibold">${displayPrice ? 'от ' + displayPrice.toLocaleString() + ' ₸' : 'вы уже здесь'}</span>
-            <span class="text-xs text-slate-500">Из города ${fromCity} →</span>
+            <span class="text-xs text-slate-500">Подробнее →</span>
           </div>
         </div>
       </div>
@@ -1239,7 +1238,7 @@ function renderPersonalSection() {
   if (!grid || typeof tpSortByProfile !== 'function') return;
   const fromCity = (typeof getUserCity === 'function') ? getUserCity().name : 'Алматы';
   const subtitle = document.getElementById('personal-subtitle');
-  if (subtitle) subtitle.textContent = `Ваш стиль: ${typeof tpTravelStyle === 'function' ? tpTravelStyle() : 'Комфортно'} · бюджет: ${typeof tpBudgetLevel === 'function' ? tpBudgetLevel() : 'Средний'} · из города ${fromCity}`;
+  if (subtitle) subtitle.textContent = `Ваш стиль: ${typeof tpTravelStyle === 'function' ? tpTravelStyle() : 'Комфортно'} · бюджет: ${typeof tpBudgetLevel === 'function' ? tpBudgetLevel() : 'Средний'}`;
   const list = tpSortByProfile(DESTINATIONS
     .filter(d => d.city !== fromCity)
     .map(d => ({ ...d, type: 'flight', price: getDisplayFlightPrice(d) })))
@@ -1319,13 +1318,18 @@ function openCityModal(destId) {
     ? `<p class="text-slate-500 text-sm text-center py-4">Пока нет отзывов. Будьте первым!</p>`
     : reviews.map(r => `
       <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-semibold text-sm">${r.author}</span>
-          <span class="text-amber-400 text-sm">${renderStars(r.rating)}</span>
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
+          </div>
         </div>
-        ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-        ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-        <p class="text-slate-600 text-xs mt-1">${r.date}</p>
       </div>`).join('');
 
   const modal = document.getElementById('city-modal');
@@ -1419,7 +1423,7 @@ async function submitReview(cityId) {
   catch (error) { showToast(error.message, 'error'); return; }
 
   const review = {
-    author, rating, text, imageUrl,
+    author, rating, text, imageUrl, avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
     date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
   };
   saveReview(cityId, review);
