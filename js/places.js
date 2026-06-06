@@ -1339,6 +1339,7 @@ function saveLocalPlaceReview(key, review) {
     const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
     if (!all[key]) all[key] = [];
+    all[key] = (all[key] || []).filter(r => !(typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(r)));
     all[key].unshift(review);
     localStorage.setItem(PLACE_REVIEWS_KEY, JSON.stringify(all));
   } catch {}
@@ -1366,7 +1367,8 @@ async function savePlaceReview(key, review, city, country, placeName) {
         comment: review.text || null,
         imageUrl: review.imageUrl || null
       });
-      saveLocalPlaceReview(key, { ...review, id: saved?.id || review.id });
+      // Успешный Supabase-отзыв НЕ дублируем в localStorage.
+      removeLocalPlaceReview(key, review.id);
       return saved;
     } catch (err) {
       if (err?.code === 'REVIEW_EXISTS') throw err;
