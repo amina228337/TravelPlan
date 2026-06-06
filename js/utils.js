@@ -1521,6 +1521,46 @@ function renderReviewImage(imageUrl) {
   return imageUrl ? `<img src="${imageUrl}" alt="Фото к отзыву" class="mt-3 w-full max-h-72 object-cover rounded-xl border border-white/10">` : '';
 }
 
+function tpReviewEscapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function tpReviewInitials(name) {
+  const clean = String(name || 'Гость').trim();
+  return clean.split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'Г';
+}
+
+function getReviewAvatarUrl(review) {
+  return review?.avatarUrl || review?.authorAvatar || review?.avatar_url || review?.author_avatar_url || '';
+}
+
+function renderReviewAvatar(review, sizeClass = 'w-9 h-9') {
+  const author = review?.author || review?.author_name || 'Гость';
+  const avatar = getReviewAvatarUrl(review);
+  const initials = tpReviewEscapeHtml(tpReviewInitials(author));
+  const fallback = `<span class="${sizeClass} rounded-full bg-sky-500/15 border border-sky-400/20 flex items-center justify-center text-xs font-bold text-sky-200 shrink-0">${initials}</span>`;
+
+  if (!avatar) return fallback;
+
+  // Важно: не используем outerHTML внутри onerror. Старый вариант ломал HTML и выводил мусор вроде A"> перед именем.
+  const safeAvatar = tpReviewEscapeHtml(avatar);
+  const safeAuthor = tpReviewEscapeHtml(author);
+  return `
+    <span class="relative ${sizeClass} shrink-0 inline-flex">
+      <img src="${safeAvatar}" alt="Аватар ${safeAuthor}" class="${sizeClass} rounded-full object-cover border border-white/10 shrink-0" onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden');">
+      <span class="hidden absolute inset-0 rounded-full bg-sky-500/15 border border-sky-400/20 items-center justify-center text-xs font-bold text-sky-200">${initials}</span>
+    </span>`;
+}
+
+function getCurrentReviewAvatarValue() {
+  return typeof getReviewAuthorAvatar === 'function' ? getReviewAuthorAvatar() : '';
+}
+
 
 
 
