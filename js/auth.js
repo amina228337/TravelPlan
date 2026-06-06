@@ -25,6 +25,12 @@ function getReviewAuthorName() {
   return getProfileDisplayName();
 }
 
+function getReviewAuthorAvatar() {
+  const profile = window.travelplanUserProfile;
+  const user = window.travelplanCurrentUser;
+  return profile?.avatar_url || user?.user_metadata?.avatar_url || '';
+}
+
 function getInitials(name) {
   const clean = String(name || 'TP').trim();
   return clean.split(/\s+/).slice(0, 2).map(x => x[0]?.toUpperCase()).join('') || 'TP';
@@ -88,11 +94,44 @@ function renderLoginRegister(root) {
         ${!isLogin ? `<input id="auth-name" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Имя или ник">` : ''}
         <input id="auth-email" type="email" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Email">
         <input id="auth-password" type="password" class="w-full px-4 py-3 bg-slate-800/50 border border-slate-600 rounded-xl focus:border-sky-500 focus:outline-none" placeholder="Пароль">
+        <div id="auth-error" class="hidden rounded-xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm text-red-200"></div>
         <button onclick="${isLogin ? 'loginWithEmail()' : 'registerWithEmail()'}" class="w-full py-3 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 font-semibold">${isLogin ? 'Войти' : 'Создать аккаунт'}</button>
         <button onclick="loginWithGoogle()" class="w-full py-3 rounded-xl bg-white/10 border border-white/15 font-semibold hover:bg-white/20 transition">G Войти через Google</button>
       </div>
-      <p class="text-xs text-slate-500 text-center">После регистрации Supabase попросит открыть письмо. Потому что даже сайт путешествий обязан заниматься бюрократией.</p>
+      <p class="text-xs text-slate-500 text-center">Если включено подтверждение email, после регистрации Supabase попросит открыть письмо. Потому что даже сайт путешествий обязан заниматься бюрократией.</p>
     </div>`;
+}
+
+function setAuthError(message = '') {
+  const box = document.getElementById('auth-error');
+  if (!box) return;
+  if (!message) {
+    box.textContent = '';
+    box.classList.add('hidden');
+    return;
+  }
+  box.textContent = message;
+  box.classList.remove('hidden');
+}
+
+async function isEmailRegisteredInProfiles(email) {
+  if (!email || !window.supabaseClient) return false;
+  try {
+    const { data, error } = await supabaseClient
+      .from('profiles')
+      .select('id')
+      .ilike('email', email)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Не удалось проверить email в profiles:', error.message);
+      return null;
+    }
+    return Boolean(data?.id);
+  } catch (e) {
+    console.warn('Проверка email сломалась:', e?.message || e);
+    return null;
+  }
 }
 
 function switchLoginToRegister(email = '') {
@@ -279,18 +318,43 @@ async function registerWithEmail() {
 async function loginWithEmail() {
   const email = document.getElementById('auth-email')?.value.trim();
   const password = document.getElementById('auth-password')?.value;
-  if (!email || !password) return showToast('Введите email и пароль', 'error');
+  setAuthError('');
+  if (!email || !password) {
+    setAuthError('Введите email и пароль');
+    return showToast('Введите email и пароль', 'error');
+  }
 
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
   if (error) {
     const msg = String(error.message || '').toLowerCase();
     if (msg.includes('email not confirmed')) {
+      setAuthError('Аккаунт есть, но email ещё не подтверждён. Проверьте почту.');
       showToast('Аккаунт есть, но email ещё не подтверждён', 'error');
       return;
     }
-    showToast('Такого аккаунта нет или пароль неверный. Перехожу к регистрации.', 'error');
-    switchLoginToRegister(email);
+
+    // Supabase специально отдаёт одинаковую ошибку и для неверного пароля,
+    // и для несуществующей почты. Поэтому аккуратно проверяем profiles.email:
+    // есть профиль -> пароль не подходит; нет профиля -> предлагаем регистрацию.
+    const registered = await isEmailRegisteredInProfiles(email);
+
+    if (registered === true) {
+      setAuthError('Неверный пароль для этого аккаунта. Проверьте пароль и попробуйте ещё раз.');
+      showToast('Неверный пароль', 'error');
+      return;
+    }
+
+    if (registered === false) {
+      showToast('Аккаунт с такой почтой не найден. Перехожу к регистрации.', 'error');
+      switchLoginToRegister(email);
+      setTimeout(() => setAuthError('Почта не найдена. Создайте аккаунт для этого email.'), 0);
+      return;
+    }
+
+    // Если RLS/сеть не дали проверить profiles, не кидаем человека в регистрацию вслепую.
+    setAuthError('Не удалось войти: проверьте email и пароль. Если аккаунта нет, перейдите во вкладку регистрации.');
+    showToast('Проверьте email и пароль', 'error');
     return;
   }
 
