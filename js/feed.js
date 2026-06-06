@@ -5699,12 +5699,7 @@ function loadFeedReviews(key) {
     : [...supabaseReviews, ...localReviews];
 }
 
-function saveFeedReview(key, review) {
-  const destId = feedKeyToDestinationId(key);
-  if (destId && typeof saveReview === 'function') {
-    saveReview(destId, review);
-    return;
-  }
+function saveLocalFeedReview(key, review) {
   try {
     const raw = localStorage.getItem(FEED_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
@@ -5712,15 +5707,89 @@ function saveFeedReview(key, review) {
     all[key].unshift(review);
     localStorage.setItem(FEED_REVIEWS_KEY, JSON.stringify(all));
   } catch {}
+}
+
+function removeLocalFeedReview(key, reviewId) {
+  const destId = feedKeyToDestinationId(key);
+  if (destId && typeof removeLocalDestinationReview === 'function') {
+    removeLocalDestinationReview(destId, reviewId);
+    return;
+  }
+  try {
+    const raw = localStorage.getItem(FEED_REVIEWS_KEY);
+    const all = raw ? JSON.parse(raw) : {};
+    all[key] = (all[key] || []).filter(r => String(r.id || '') !== String(reviewId));
+    localStorage.setItem(FEED_REVIEWS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+async function saveFeedReview(key, review) {
+  const destId = feedKeyToDestinationId(key);
+  if (destId && typeof saveReview === 'function') {
+    return await saveReview(destId, review);
+  }
   if (typeof dbAddReview === 'function') {
-    dbAddReview({
-      entityType: String(key).startsWith('hotel_') ? 'hotel' : 'flight',
-      entityId: key,
-      authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
-      rating: review.rating,
-      comment: review.text || null,
-      imageUrl: review.imageUrl || null
-    }).catch(err => console.warn('Отзыв ленты сохранён локально, но не ушёл в Supabase:', err.message || err));
+    try {
+      const saved = await dbAddReview({
+        entityType: String(key).startsWith('hotel_') ? 'hotel' : 'flight',
+        entityId: key,
+        authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
+        rating: review.rating,
+        comment: review.text || null,
+        imageUrl: review.imageUrl || null
+      });
+      saveLocalFeedReview(key, { ...review, id: saved?.id || review.id });
+      return saved;
+    } catch (err) {
+      if (err?.code === 'REVIEW_EXISTS') throw err;
+      console.warn('Отзыв ленты сохранён локально, но не ушёл в Supabase:', err.message || err);
+    }
+  }
+  saveLocalFeedReview(key, review);
+  return review;
+}
+
+function renderFeedReviewItem(r, key) {
+  const canDelete = typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(r);
+  const reviewId = jsString(r.id || '');
+  return `
+      <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${tpReviewEscapeHtml ? tpReviewEscapeHtml(r.author) : r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderFeedReviewStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${tpReviewEscapeHtml ? tpReviewEscapeHtml(r.text) : r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <div class="flex items-center justify-between gap-3 mt-1">
+              <p class="text-slate-600 text-xs">${r.date}</p>
+              ${canDelete ? `<button onclick="event.stopPropagation(); deleteFeedReview('${jsString(key)}','${reviewId}')" class="text-xs text-red-300 hover:text-red-200 hover:underline">Удалить</button>` : ''}
+            </div>
+          </div>
+        </div>
+      </div>`;
+}
+
+async function deleteFeedReview(key, reviewId) {
+  const review = loadFeedReviews(key).find(r => String(r.id || '') === String(reviewId));
+  if (!review || !(typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(review))) {
+    showToast('Можно удалить только свой отзыв', 'error');
+    return;
+  }
+  try {
+    if (review._source === 'supabase' && typeof dbDeleteReview === 'function') await dbDeleteReview(review);
+    removeLocalFeedReview(key, reviewId);
+    const countEl = document.getElementById('feed-reviews-count');
+    if (countEl) countEl.textContent = String(loadFeedReviews(key).length);
+    const list = document.getElementById('feed-reviews-list');
+    if (list) list.innerHTML = loadFeedReviews(key).map(r => renderFeedReviewItem(r, key)).join('') || '<p class="text-slate-500 text-sm text-center py-3">Пока нет отзывов.</p>';
+    if (typeof renderFeed === 'function') renderFeed(getFilteredFeedItems(getFeedFilterState()));
+    if (typeof renderTop3Destinations === 'function') renderTop3Destinations();
+    showToast('Отзыв удалён. Теперь можно написать новый.');
+  } catch (error) {
+    showToast(error.message || 'Не удалось удалить отзыв', 'error');
   }
 }
 
@@ -5739,40 +5808,31 @@ function renderFeedReviewsSection(key, title = 'отзыв') {
   const reviews = loadFeedReviews(key);
   const reviewsHtml = reviews.length === 0
     ? '<p class="text-slate-500 text-sm text-center py-3">Пока нет отзывов. Можно оставить первым, цивилизация выдержит.</p>'
-    : reviews.map(r => `
-      <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
-        <div class="flex items-start gap-3">
-          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-3 mb-1">
-              <span class="font-semibold text-sm truncate">${r.author}</span>
-              <span class="text-amber-400 text-sm shrink-0">${renderFeedReviewStars(r.rating)}</span>
-            </div>
-            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
-          </div>
-        </div>
-      </div>`).join('');
+    : reviews.map(r => renderFeedReviewItem(r, key)).join('');
+  const hasOwnReview = typeof tpHasOwnReview === 'function' && tpHasOwnReview(reviews);
 
   return `
     <div class="mt-4 pt-4 border-t border-white/10">
       <div class="mt-4 border-t border-white/10 pt-4">
-        <h3 class="text-base font-semibold mb-1">✍️ Оставьте свой отзыв</h3>
-        <div class="text-xs text-slate-400 mb-2">Отзыв будет опубликован от имени: <span class="text-sky-300 font-semibold">${typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'}</span></div>
-        <div class="flex gap-1 mb-2">
-          ${[1,2,3,4,5].map(n => `<button class="feed-review-star-btn text-2xl text-slate-600 hover:text-amber-400 transition" data-star="${n}" onclick="pickFeedReviewStar(${n})">★</button>`).join('')}
-        </div>
-        <textarea id="feed-review-text" rows="3" placeholder="Комментарий можно не писать"
-          class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm mb-3 focus:border-sky-500 focus:outline-none resize-none"></textarea>
-        <div class="grid grid-cols-1 gap-2 mb-3">
-          <input id="feed-review-image-file" type="file" accept="image/*" class="w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20">
-          <input id="feed-review-image-url" type="url" placeholder="Или ссылка на фото" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
-        </div>
-        <button onclick="submitFeedReview('${key}')"
-          class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl text-sm font-semibold hover:from-sky-400 hover:to-blue-500 transition">
-          Опубликовать отзыв
-        </button>
+        ${hasOwnReview ? `
+          <div class="bg-sky-500/10 border border-sky-400/20 rounded-xl p-3 text-sm text-sky-100">
+            Вы уже оставили отзыв. Чтобы написать новый, удалите старый.
+          </div>` : `
+          <h3 class="text-base font-semibold mb-1">✍️ Оставьте свой отзыв</h3>
+          <div class="text-xs text-slate-400 mb-2">Отзыв будет опубликован от имени: <span class="text-sky-300 font-semibold">${typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'}</span></div>
+          <div class="flex gap-1 mb-2">
+            ${[1,2,3,4,5].map(n => `<button class="feed-review-star-btn text-2xl text-slate-600 hover:text-amber-400 transition" data-star="${n}" onclick="pickFeedReviewStar(${n})">★</button>`).join('')}
+          </div>
+          <textarea id="feed-review-text" rows="3" placeholder="Комментарий можно не писать"
+            class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm mb-3 focus:border-sky-500 focus:outline-none resize-none"></textarea>
+          <div class="grid grid-cols-1 gap-2 mb-3">
+            <input id="feed-review-image-file" type="file" accept="image/*" class="w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20">
+            <input id="feed-review-image-url" type="url" placeholder="Или ссылка на фото" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+          </div>
+          <button onclick="submitFeedReview('${key}')"
+            class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl text-sm font-semibold hover:from-sky-400 hover:to-blue-500 transition">
+            Опубликовать отзыв
+          </button>`}
       </div>
     </div>
     <div class="mt-5 border-t border-white/10 pt-4">
@@ -5782,6 +5842,10 @@ function renderFeedReviewsSection(key, title = 'отзыв') {
 }
 
 async function submitFeedReview(key) {
+  if (typeof tpHasOwnReview === 'function' && tpHasOwnReview(loadFeedReviews(key))) {
+    showToast('Вы уже оставили отзыв. Удалите его, чтобы написать новый.', 'error');
+    return;
+  }
   const author = typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость';
   const text = (document.getElementById('feed-review-text')?.value || '').trim();
   const rating = window._feedReviewStarRating || 0;
@@ -5791,10 +5855,18 @@ async function submitFeedReview(key) {
   try { imageUrl = typeof getReviewImageValue === 'function' ? await getReviewImageValue('feed-review-image-file', 'feed-review-image-url') : null; }
   catch (error) { showToast(error.message, 'error'); return; }
 
-  saveFeedReview(key, {
-    author, rating, text, imageUrl, avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
-    date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
-  });
+  try {
+    await saveFeedReview(key, {
+      id: `local_${Date.now()}`,
+      _localUserId: (typeof tpGetCurrentReviewOwnerKey === 'function' ? tpGetCurrentReviewOwnerKey() : (window.travelplanCurrentUser?.id || 'guest')),
+      userId: window.travelplanCurrentUser?.id || '',
+      author, rating, text, imageUrl, avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
+      date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    });
+  } catch (error) {
+    showToast(error.message || 'Не удалось сохранить отзыв', 'error');
+    return;
+  }
 
   const combined = getCombinedFeedRating(key);
   const ratingEl = document.getElementById('feed-detail-average-rating');
@@ -5805,21 +5877,7 @@ async function submitFeedReview(key) {
   const reviewsList = document.getElementById('feed-reviews-list');
   if (reviewsList) {
     const reviews = loadFeedReviews(key);
-    reviewsList.innerHTML = reviews.map(r => `
-      <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
-        <div class="flex items-start gap-3">
-          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-3 mb-1">
-              <span class="font-semibold text-sm truncate">${r.author}</span>
-              <span class="text-amber-400 text-sm shrink-0">${renderFeedReviewStars(r.rating)}</span>
-            </div>
-            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
-          </div>
-        </div>
-      </div>`).join('');
+    reviewsList.innerHTML = reviews.map(r => renderFeedReviewItem(r, key)).join('');
   }
 
   
