@@ -75,6 +75,14 @@ async function dbAddReview({ entityType, entityId, city, country, authorName, ra
     throw error;
   }
 
+  // Сразу обновляем общий кэш, чтобы карточки не ждали перезагрузки страницы.
+  if (data) {
+    window.travelplanReviewsCache = window.travelplanReviewsCache || { loaded: false, rows: [] };
+    window.travelplanReviewsCache.rows = [data, ...(window.travelplanReviewsCache.rows || [])];
+    window.travelplanReviewsCache.loaded = true;
+    window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
+  }
+
   return data;
 }
 
@@ -82,6 +90,105 @@ function calcAverageRating(reviews) {
   if (!reviews || reviews.length === 0) return null;
   const sum = reviews.reduce((acc, item) => acc + Number(item.rating || 0), 0);
   return Math.round((sum / reviews.length) * 10) / 10;
+}
+
+// ── Общий кэш отзывов из Supabase ─────────────────────────────────────────
+// Карточки билетов, направлений, отелей и мест должны читать одни и те же отзывы.
+// Раньше часть сайта брала localStorage, а часть писала в Supabase. Получался цирк с разными реальностями.
+window.travelplanReviewsCache = window.travelplanReviewsCache || { loaded: false, rows: [] };
+
+function tpNormalizeReviewEntityId(value) {
+  const raw = String(value || '').trim();
+  const lower = raw.toLowerCase();
+  const cityMap = {
+    'шымкент': 'shymkent', 'shymкент': 'shymkent',
+    'дубай': 'dubai',
+    'астана': 'astana', 'нур-султан': 'astana', 'нурсултан': 'astana',
+    'актау': 'aktau', 'алматы': 'almaty', 'түркістан': 'turkistan', 'туркестан': 'turkistan',
+    'бурабай': 'burabay', 'боровое': 'burabay',
+    'стамбул': 'istanbul', 'istanbul': 'istanbul',
+    'бангкок': 'bangkok', 'bangkok': 'bangkok'
+  };
+  if (cityMap[lower]) return cityMap[lower];
+  return lower
+    .replace(/^dest_/, '')
+    .replace(/[ё]/g, 'е')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zа-я0-9_\-]/gi, '');
+}
+
+function tpReviewRowToAppReview(row) {
+  const dateValue = row?.created_at || row?.date || new Date().toISOString();
+  let readableDate = '';
+  try {
+    readableDate = new Date(dateValue).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch {
+    readableDate = String(dateValue || '');
+  }
+  return {
+    id: row?.id || '',
+    author: row?.author_name || row?.author || 'Гость',
+    rating: Number(row?.rating || 0),
+    text: row?.comment || row?.text || '',
+    imageUrl: row?.image_url || row?.imageUrl || '',
+    avatarUrl: row?.avatar_url || row?.avatarUrl || '',
+    date: readableDate,
+    _source: 'supabase',
+    _entityType: row?.entity_type || '',
+    _entityId: row?.entity_id || ''
+  };
+}
+
+function tpMergeReviews(localReviews = [], supabaseReviews = []) {
+  const map = new Map();
+  [...supabaseReviews, ...localReviews].forEach((review, index) => {
+    const key = review.id
+      ? `id_${review.id}`
+      : `${review.author || ''}_${review.rating || ''}_${review.text || ''}_${review.date || ''}_${review.imageUrl || ''}_${index}`;
+    if (!map.has(key)) map.set(key, review);
+  });
+  return [...map.values()].filter(r => Number(r.rating || 0) > 0);
+}
+
+function tpGetCachedReviews(entityType, entityId) {
+  const wantedType = String(entityType || '').trim().toLowerCase();
+  const wantedId = String(entityId || '').trim();
+  const wantedNorm = tpNormalizeReviewEntityId(wantedId);
+  const rows = window.travelplanReviewsCache?.rows || [];
+
+  return rows
+    .filter(row => {
+      const rowType = String(row.entity_type || '').trim().toLowerCase();
+      const rowId = String(row.entity_id || '').trim();
+      const rowNorm = tpNormalizeReviewEntityId(rowId);
+      if (wantedType === 'destination') {
+        return rowType === 'destination' && (rowId === wantedId || rowNorm === wantedNorm);
+      }
+      return rowType === wantedType && (rowId === wantedId || rowNorm === wantedNorm);
+    })
+    .map(tpReviewRowToAppReview);
+}
+
+async function dbLoadReviewCache() {
+  if (!isSupabaseReady()) {
+    window.travelplanReviewsCache = { loaded: true, rows: [] };
+    return [];
+  }
+
+  const { data, error } = await supabaseClient
+    .from('reviews')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.warn('Отзывы из Supabase не загрузились:', error.message);
+    window.travelplanReviewsCache = { loaded: true, rows: [] };
+    return [];
+  }
+
+  window.travelplanReviewsCache = { loaded: true, rows: data || [] };
+  window.dispatchEvent(new CustomEvent('travelplan:reviews-loaded'));
+  return data || [];
 }
 
 // ── Bookings ───────────────────────────────────────────────────────────────
