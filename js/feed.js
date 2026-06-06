@@ -5730,13 +5730,18 @@ function renderFeedReviewsSection(key, title = 'отзыв') {
     ? '<p class="text-slate-500 text-sm text-center py-3">Пока нет отзывов. Можно оставить первым, цивилизация выдержит.</p>'
     : reviews.map(r => `
       <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-semibold text-sm">${r.author}</span>
-          <span class="text-amber-400 text-sm">${renderFeedReviewStars(r.rating)}</span>
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderFeedReviewStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
+          </div>
         </div>
-        ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-        ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-        <p class="text-slate-600 text-xs mt-1">${r.date}</p>
       </div>`).join('');
 
   return `
@@ -5776,7 +5781,7 @@ async function submitFeedReview(key) {
   catch (error) { showToast(error.message, 'error'); return; }
 
   saveFeedReview(key, {
-    author, rating, text, imageUrl,
+    author, rating, text, imageUrl, avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
     date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
   });
 
@@ -5791,13 +5796,18 @@ async function submitFeedReview(key) {
     const reviews = loadFeedReviews(key);
     reviewsList.innerHTML = reviews.map(r => `
       <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-semibold text-sm">${r.author}</span>
-          <span class="text-amber-400 text-sm">${renderFeedReviewStars(r.rating)}</span>
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderFeedReviewStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
+          </div>
         </div>
-        ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-        ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-        <p class="text-slate-600 text-xs mt-1">${r.date}</p>
       </div>`).join('');
   }
 
@@ -5855,13 +5865,18 @@ function openFeedItemDetail(itemIndex) {
     ? `<p class="text-slate-500 text-sm text-center py-4">Пока нет отзывов. Будьте первым!</p>`
     : reviews.map(r => `
       <div class="bg-slate-800/50 rounded-xl p-4 mb-3">
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-semibold text-sm">${r.author}</span>
-          <span class="text-amber-400 text-sm">${renderFeedReviewStars(r.rating)}</span>
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderFeedReviewStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
+          </div>
         </div>
-        ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-        ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-        <p class="text-slate-600 text-xs mt-1">${r.date}</p>
       </div>`).join('');
 
   const contentHtml = `
