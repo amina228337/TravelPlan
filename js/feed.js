@@ -5681,11 +5681,22 @@ function feedKeyToDestinationId(key) {
 function loadFeedReviews(key) {
   const destId = feedKeyToDestinationId(key);
   if (destId && typeof loadReviews === 'function') return loadReviews(destId);
+
+  let localReviews = [];
   try {
     const raw = localStorage.getItem(FEED_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    return all[key] || [];
-  } catch { return []; }
+    localReviews = all[key] || [];
+  } catch { localReviews = []; }
+
+  const entityType = String(key || '').startsWith('hotel_') ? 'hotel' : 'flight';
+  const supabaseReviews = typeof tpGetCachedReviews === 'function'
+    ? tpGetCachedReviews(entityType, key)
+    : [];
+
+  return typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(localReviews, supabaseReviews)
+    : [...supabaseReviews, ...localReviews];
 }
 
 function saveFeedReview(key, review) {
@@ -6082,3 +6093,13 @@ function initFeed() {
   updateFiltersBadge(state);
   renderFeed(getFilteredFeedItems(state));
 }
+
+window.addEventListener('travelplan:reviews-loaded', () => {
+  const feed = document.getElementById('feed-results');
+  if (feed) {
+    const state = getFeedFilterState();
+    renderFeed(getFilteredFeedItems(state));
+  }
+  if (typeof renderTop3Destinations === 'function') renderTop3Destinations();
+  if (typeof renderPersonalSection === 'function') renderPersonalSection();
+});
