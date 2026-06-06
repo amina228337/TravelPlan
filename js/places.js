@@ -1364,13 +1364,18 @@ function renderPlaceReviewsBlock(key) {
     ? '<p class="text-slate-500 text-sm text-center py-3">Пока нет отзывов.</p>'
     : reviews.map(r => `
       <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-3">
-        <div class="flex items-center justify-between gap-3 mb-1">
-          <span class="font-semibold text-sm">${r.author}</span>
-          <span class="text-amber-400 text-sm">${renderPlaceReviewStars(r.rating)}</span>
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderPlaceReviewStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
+          </div>
         </div>
-        ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
-        ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-        <p class="text-slate-600 text-xs mt-1">${r.date}</p>
       </div>`).join('');
   return `
     <div class="mt-6 border-t border-white/10 pt-4">
@@ -1405,6 +1410,7 @@ async function submitPlaceReview(key) {
 
   const review = {
     author: typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость',
+    avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
     rating,
     text,
     imageUrl,
