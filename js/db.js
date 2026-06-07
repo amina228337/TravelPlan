@@ -169,6 +169,54 @@ async function tpHydrateReviewRowsWithProfileAvatars(rows = []) {
 }
 
 
+
+async function dbSyncCurrentUserReviewAvatar(avatarUrl) {
+  const userId = window.travelplanCurrentUser?.id || null;
+  if (!userId || !avatarUrl) return false;
+
+  tpPatchCachedReviewAvatarsForUser(userId, avatarUrl);
+
+  if (!isSupabaseReady()) return false;
+  try {
+    const { error } = await supabaseClient
+      .from('reviews')
+      .update({ avatar_url: avatarUrl })
+      .eq('user_id', userId);
+
+    if (error) {
+      // Если колонка avatar_url ещё не создана или RLS не даёт update, UI не падает.
+      // Для постоянного решения нужно выполнить SQL из SUPABASE_REVIEW_AVATAR_FIX.sql.
+      console.warn('Не удалось обновить avatar_url в reviews:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Ошибка синхронизации аватарок отзывов:', err?.message || err);
+    return false;
+  }
+}
+
+function tpPatchCachedReviewAvatarsForUser(userId, avatarUrl) {
+  if (!userId || !avatarUrl) return;
+  const map = window.travelplanReviewsCache;
+  if (!map || typeof map.forEach !== 'function') return;
+
+  map.forEach((reviews, key) => {
+    let changed = false;
+    const patched = (reviews || []).map(review => {
+      if (review?.user_id !== userId) return review;
+      changed = true;
+      return {
+        ...review,
+        avatarUrl,
+        avatar_url: avatarUrl,
+        author_avatar_url: avatarUrl
+      };
+    });
+    if (changed) map.set(key, patched);
+  });
+}
+
 // ── Reviews cache: синхронизация отзывов из Supabase со всем сайтом ───────
 
 function tpReviewToUiReview(row) {
