@@ -5391,14 +5391,11 @@ function getFeedCountryName(item) {
 }
 
 function getCombinedFeedRating(key) {
-  const r = getRating(key);
-  const reviews = loadFeedReviews(key);
-  const savedTotal = r?.total || 0;
-  const savedCount = r?.count || 0;
-  const reviewTotal = reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
-  const reviewCount = reviews.length;
-  const total = savedTotal + reviewTotal;
-  const count = savedCount + reviewCount;
+  // На карточках показываем именно отзывы, а не сумму «отзывы + отдельные клики по звёздам».
+  // Иначе в базе 6 отзывов, а на сайте внезапно 12, потому что фронт решил стать инфляцией.
+  const reviews = loadFeedReviews(key).filter(review => Number(review.rating) > 0);
+  const total = reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
+  const count = reviews.length;
   return count > 0 ? { rating: parseFloat((total / count).toFixed(1)), count } : { rating: null, count: 0 };
 }
 
@@ -5681,19 +5678,53 @@ function feedKeyToDestinationId(key) {
 function loadFeedReviews(key) {
   const destId = feedKeyToDestinationId(key);
   if (destId && typeof loadReviews === 'function') return loadReviews(destId);
+
+  let localReviews = [];
   try {
     const raw = localStorage.getItem(FEED_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    return all[key] || [];
-  } catch { return []; }
+    localReviews = all[key] || [];
+  } catch { localReviews = []; }
+
+  const entityType = String(key || '').startsWith('hotel_') ? 'hotel' : 'flight';
+  const dbReviews = typeof dbGetCachedReviews === 'function'
+    ? dbGetCachedReviews(entityType, key)
+    : [];
+
+  if (window.travelplanReviewsCacheLoaded) {
+    return typeof tpMergeReviews === 'function' ? tpMergeReviews([], dbReviews) : dbReviews;
+  }
+
+  return typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(localReviews, dbReviews)
+    : [...dbReviews, ...localReviews];
 }
 
-function saveFeedReview(key, review) {
+async function saveFeedReview(key, review) {
   const destId = feedKeyToDestinationId(key);
   if (destId && typeof saveReview === 'function') {
-    saveReview(destId, review);
-    return;
+    return await saveReview(destId, review);
   }
+
+  if (typeof dbAddReview === 'function') {
+    try {
+      await dbAddReview({
+        entityType: String(key).startsWith('hotel_') ? 'hotel' : 'flight',
+        entityId: key,
+        authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
+        rating: review.rating,
+        comment: review.text || null,
+        imageUrl: review.imageUrl || null,
+        avatarUrl: review.avatarUrl || (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : '')
+      });
+      // dbAddReview уже добавляет отзыв в общий кеш. Не перезагружаем кеш сразу,
+      // иначе свежая аватарка может потеряться, если profiles закрыт RLS.
+      return true;
+    } catch (err) {
+      console.warn('Отзыв ленты не ушёл в Supabase, сохраню локально:', err.message || err);
+    }
+  }
+
   try {
     const raw = localStorage.getItem(FEED_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
@@ -5701,16 +5732,7 @@ function saveFeedReview(key, review) {
     all[key].unshift(review);
     localStorage.setItem(FEED_REVIEWS_KEY, JSON.stringify(all));
   } catch {}
-  if (typeof dbAddReview === 'function') {
-    dbAddReview({
-      entityType: String(key).startsWith('hotel_') ? 'hotel' : 'flight',
-      entityId: key,
-      authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
-      rating: review.rating,
-      comment: review.text || null,
-      imageUrl: review.imageUrl || null
-    }).catch(err => console.warn('Отзыв ленты сохранён локально, но не ушёл в Supabase:', err.message || err));
-  }
+  return false;
 }
 
 function renderFeedReviewStars(rating) {
@@ -5780,8 +5802,9 @@ async function submitFeedReview(key) {
   try { imageUrl = typeof getReviewImageValue === 'function' ? await getReviewImageValue('feed-review-image-file', 'feed-review-image-url') : null; }
   catch (error) { showToast(error.message, 'error'); return; }
 
-  saveFeedReview(key, {
+  await saveFeedReview(key, {
     author, rating, text, imageUrl, avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
+    created_at: new Date().toISOString(),
     date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
   });
 
