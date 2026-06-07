@@ -196,6 +196,7 @@ async function initApp() {
     if (window.travelplanAuthReady) await window.travelplanAuthReady;
     else if (typeof refreshAuthState === 'function') await refreshAuthState({ skipBookings: true });
     await initDataSdk();
+    if (typeof dbLoadAllReviewsCache === 'function') await dbLoadAllReviewsCache();
     setupForms();
     setupDateConstraints();
     initAutocomplete();
