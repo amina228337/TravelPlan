@@ -114,51 +114,20 @@ function setAuthError(message = '') {
   box.classList.remove('hidden');
 }
 
-function normalizeAuthEmail(email) {
-  return String(email || '').trim().toLowerCase();
-}
-
-function rememberKnownAuthEmail(email) {
-  const normalized = normalizeAuthEmail(email);
-  if (!normalized) return;
-  try {
-    const key = 'travelplan_known_auth_emails';
-    const list = JSON.parse(localStorage.getItem(key) || '[]');
-    const set = new Set(list.map(normalizeAuthEmail).filter(Boolean));
-    set.add(normalized);
-    localStorage.setItem(key, JSON.stringify([...set]));
-  } catch {}
-}
-
-function isKnownAuthEmail(email) {
-  const normalized = normalizeAuthEmail(email);
-  if (!normalized) return false;
-  try {
-    const list = JSON.parse(localStorage.getItem('travelplan_known_auth_emails') || '[]');
-    return list.map(normalizeAuthEmail).includes(normalized);
-  } catch { return false; }
-}
-
 async function isEmailRegisteredInProfiles(email) {
-  const normalized = normalizeAuthEmail(email);
-  if (!normalized || !window.supabaseClient) return isKnownAuthEmail(normalized) ? true : null;
-  if (isKnownAuthEmail(normalized)) return true;
-
+  if (!email || !window.supabaseClient) return false;
   try {
     const { data, error } = await supabaseClient
       .from('profiles')
-      .select('id,email')
-      .ilike('email', normalized)
-      .limit(1);
+      .select('id')
+      .ilike('email', email)
+      .maybeSingle();
 
     if (error) {
       console.warn('Не удалось проверить email в profiles:', error.message);
       return null;
     }
-
-    const found = Array.isArray(data) && data.length > 0;
-    if (found) rememberKnownAuthEmail(normalized);
-    return found;
+    return Boolean(data?.id);
   } catch (e) {
     console.warn('Проверка email сломалась:', e?.message || e);
     return null;
@@ -341,7 +310,6 @@ async function registerWithEmail() {
     options: { data: { full_name: name || email.split('@')[0] } }
   });
   if (error) return showToast(error.message, 'error');
-  rememberKnownAuthEmail(email);
   showToast(data?.session ? 'Аккаунт создан' : 'Аккаунт создан. Проверьте email, если включено подтверждение.');
   await refreshAuthState();
   renderAuthModal();
@@ -360,39 +328,33 @@ async function loginWithEmail() {
 
   if (error) {
     const msg = String(error.message || '').toLowerCase();
+
     if (msg.includes('email not confirmed')) {
-      setAuthError('Аккаунт есть, но email ещё не подтверждён. Проверьте почту.');
-      showToast('Аккаунт есть, но email ещё не подтверждён', 'error');
+      setAuthError('Аккаунт найден, но email ещё не подтверждён. Проверьте почту.');
+      showToast('Email не подтверждён', 'error');
       return;
     }
 
-    // Supabase специально отдаёт одинаковую ошибку и для неверного пароля,
-    // и для несуществующей почты. Поэтому аккуратно проверяем profiles.email:
-    // есть профиль -> пароль не подходит; нет профиля -> предлагаем регистрацию.
-    const registered = await isEmailRegisteredInProfiles(email);
-
-    if (registered === true || isKnownAuthEmail(email)) {
-      setAuthError('Неверный пароль для этого аккаунта. Проверьте пароль и попробуйте ещё раз.');
-      showToast('Неверный пароль', 'error');
+    // ВАЖНО: Supabase специально не раскрывает, существует ли email.
+    // При неверном пароле и при несуществующей почте он часто отдаёт одну и ту же
+    // ошибку: "Invalid login credentials". Поэтому НЕ переключаем пользователя
+    // на регистрацию автоматически, иначе существующий аккаунт выглядит как "не найден".
+    if (
+      msg.includes('invalid login credentials') ||
+      msg.includes('invalid credentials') ||
+      msg.includes('invalid') ||
+      msg.includes('user not found')
+    ) {
+      setAuthError('Неверный email или пароль. Если аккаунт уже зарегистрирован, значит пароль введён неправильно.');
+      showToast('Неверный email или пароль', 'error');
       return;
     }
 
-    if (registered === false) {
-      // Раньше тут был автопереход на регистрацию. На практике RLS/пустой profiles иногда врёт,
-      // и неверный пароль выглядит как «аккаунта нет». Поэтому не перекидываем насильно.
-      setAuthError('Почта не найдена в профилях. Если аккаунта точно нет — откройте вкладку регистрации. Если аккаунт есть — проверьте пароль.');
-      showToast('Почта не найдена или пароль неверный', 'error');
-      return;
-    }
-
-    // Если Supabase/RLS скрывает наличие email, не кидаем человека в регистрацию вслепую.
-    // Это важнее, чем красивый автопереход: иначе неверный пароль выглядит как «создай аккаунт заново».
-    setAuthError('Неверный пароль или аккаунт не найден. Проверьте данные. Если аккаунта точно нет — откройте вкладку регистрации.');
-    showToast('Проверьте email и пароль', 'error');
+    setAuthError('Не удалось войти. Проверьте email, пароль и подключение к интернету.');
+    showToast('Ошибка входа', 'error');
     return;
   }
 
-  rememberKnownAuthEmail(email);
   showToast('Вы вошли в аккаунт');
   await refreshAuthState({ skipBookings: false });
   renderAuthModal();
