@@ -1318,104 +1318,32 @@ function getPlaceReviewKey(city, placeName) {
 }
 
 function loadPlaceReviews(key) {
-  let localReviews = [];
   try {
     const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    localReviews = all[key] || [];
-  } catch { localReviews = []; }
-
-  const supabaseReviews = typeof tpGetCachedReviews === 'function'
-    ? tpGetCachedReviews('place', key)
-    : [];
-
-  return typeof tpMergeReviews === 'function'
-    ? tpMergeReviews(localReviews, supabaseReviews)
-    : [...supabaseReviews, ...localReviews];
+    return all[key] || [];
+  } catch { return []; }
 }
 
-function saveLocalPlaceReview(key, review) {
+function savePlaceReview(key, review, city, country, placeName) {
   try {
     const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
     if (!all[key]) all[key] = [];
-    all[key] = (all[key] || []).filter(r => !(typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(r)));
     all[key].unshift(review);
     localStorage.setItem(PLACE_REVIEWS_KEY, JSON.stringify(all));
   } catch {}
-}
-
-function removeLocalPlaceReview(key, reviewId) {
-  try {
-    const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
-    const all = raw ? JSON.parse(raw) : {};
-    all[key] = (all[key] || []).filter(r => String(r.id || '') !== String(reviewId));
-    localStorage.setItem(PLACE_REVIEWS_KEY, JSON.stringify(all));
-  } catch {}
-}
-
-async function savePlaceReview(key, review, city, country, placeName) {
   if (typeof dbAddReview === 'function') {
-    try {
-      const saved = await dbAddReview({
-        entityType: 'place',
-        entityId: key,
-        city,
-        country,
-        authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
-        rating: review.rating,
-        comment: review.text || null,
-        imageUrl: review.imageUrl || null
-      });
-      // Успешный Supabase-отзыв НЕ дублируем в localStorage.
-      removeLocalPlaceReview(key, review.id);
-      return saved;
-    } catch (err) {
-      if (err?.code === 'REVIEW_EXISTS') throw err;
-      console.warn('Отзыв места сохранён локально, но не ушёл в Supabase:', err.message || err);
-    }
-  }
-  saveLocalPlaceReview(key, review);
-  return review;
-}
-
-function renderPlaceReviewItem(r, key) {
-  const canDelete = typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(r);
-  const reviewId = jsString(r.id || '');
-  return `
-      <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-3">
-        <div class="flex items-start gap-3">
-          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-3 mb-1">
-              <span class="font-semibold text-sm truncate">${tpReviewEscapeHtml ? tpReviewEscapeHtml(r.author) : r.author}</span>
-              <span class="text-amber-400 text-sm shrink-0">${renderPlaceReviewStars(r.rating)}</span>
-            </div>
-            ${r.text ? `<p class="text-slate-300 text-sm">${tpReviewEscapeHtml ? tpReviewEscapeHtml(r.text) : r.text}</p>` : ''}
-            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
-            <div class="flex items-center justify-between gap-3 mt-1">
-              <p class="text-slate-600 text-xs">${r.date}</p>
-              ${canDelete ? `<button onclick="event.stopPropagation(); deletePlaceReview('${jsString(key)}','${reviewId}')" class="text-xs text-red-300 hover:text-red-200 hover:underline">Удалить</button>` : ''}
-            </div>
-          </div>
-        </div>
-      </div>`;
-}
-
-async function deletePlaceReview(key, reviewId) {
-  const review = loadPlaceReviews(key).find(r => String(r.id || '') === String(reviewId));
-  if (!review || !(typeof tpReviewBelongsToCurrentUser === 'function' && tpReviewBelongsToCurrentUser(review))) {
-    showToast('Можно удалить только свой отзыв', 'error');
-    return;
-  }
-  try {
-    if (review._source === 'supabase' && typeof dbDeleteReview === 'function') await dbDeleteReview(review);
-    removeLocalPlaceReview(key, reviewId);
-    const ctx = window._currentPlaceReviewContext;
-    if (ctx) openPlaceDetail(ctx.city, ctx.category, ctx.index);
-    showToast('Отзыв удалён. Теперь можно написать новый.');
-  } catch (error) {
-    showToast(error.message || 'Не удалось удалить отзыв', 'error');
+    dbAddReview({
+      entityType: 'place',
+      entityId: key,
+      city,
+      country,
+      authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
+      rating: review.rating,
+      comment: review.text || null,
+      imageUrl: review.imageUrl || null
+    }).catch(err => console.warn('Отзыв места сохранён локально, но не ушёл в Supabase:', err.message || err));
   }
 }
 
@@ -1434,26 +1362,35 @@ function renderPlaceReviewsBlock(key) {
   const reviews = loadPlaceReviews(key);
   const reviewsHtml = reviews.length === 0
     ? '<p class="text-slate-500 text-sm text-center py-3">Пока нет отзывов.</p>'
-    : reviews.map(r => renderPlaceReviewItem(r, key)).join('');
-  const hasOwnReview = typeof tpHasOwnReview === 'function' && tpHasOwnReview(reviews);
+    : reviews.map(r => `
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 mb-3">
+        <div class="flex items-start gap-3">
+          ${typeof renderReviewAvatar === 'function' ? renderReviewAvatar(r) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-3 mb-1">
+              <span class="font-semibold text-sm truncate">${r.author}</span>
+              <span class="text-amber-400 text-sm shrink-0">${renderPlaceReviewStars(r.rating)}</span>
+            </div>
+            ${r.text ? `<p class="text-slate-300 text-sm">${r.text}</p>` : ''}
+            ${typeof renderReviewImage === 'function' ? renderReviewImage(r.imageUrl) : ''}
+            <p class="text-slate-600 text-xs mt-1">${r.date}</p>
+          </div>
+        </div>
+      </div>`).join('');
   return `
     <div class="mt-6 border-t border-white/10 pt-4">
-      ${hasOwnReview ? `
-        <div class="bg-sky-500/10 border border-sky-400/20 rounded-xl p-3 text-sm text-sky-100">
-          Вы уже оставили отзыв об этом месте. Чтобы написать новый, удалите старый.
-        </div>` : `
-        <h3 class="font-semibold mb-3">✍️ Оставьте отзыв о месте</h3>
-        <div class="text-xs text-slate-400 mb-2">Отзыв будет опубликован от имени: <span class="text-sky-300 font-semibold">${typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'}</span></div>
-        <div class="flex gap-1 mb-2">
-          ${[1,2,3,4,5].map(n => `<button class="place-review-star-btn text-2xl text-slate-600 hover:text-amber-400 transition" data-star="${n}" onclick="pickPlaceReviewStar(${n})">★</button>`).join('')}
-        </div>
-        <textarea id="place-review-text" rows="3" placeholder="Комментарий можно не писать"
-          class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm mb-3 focus:border-sky-500 focus:outline-none resize-none"></textarea>
-        <div class="grid grid-cols-1 gap-2 mb-3">
-          <input id="place-review-image-file" type="file" accept="image/*" class="w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20">
-          <input id="place-review-image-url" type="url" placeholder="Или ссылка на фото" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
-        </div>
-        <button onclick="submitPlaceReview('${jsString(key)}')" class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl text-sm font-semibold">Опубликовать отзыв</button>`}
+      <h3 class="font-semibold mb-3">✍️ Оставьте отзыв о месте</h3>
+      <div class="text-xs text-slate-400 mb-2">Отзыв будет опубликован от имени: <span class="text-sky-300 font-semibold">${typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'}</span></div>
+      <div class="flex gap-1 mb-2">
+        ${[1,2,3,4,5].map(n => `<button class="place-review-star-btn text-2xl text-slate-600 hover:text-amber-400 transition" data-star="${n}" onclick="pickPlaceReviewStar(${n})">★</button>`).join('')}
+      </div>
+      <textarea id="place-review-text" rows="3" placeholder="Комментарий можно не писать"
+        class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm mb-3 focus:border-sky-500 focus:outline-none resize-none"></textarea>
+      <div class="grid grid-cols-1 gap-2 mb-3">
+        <input id="place-review-image-file" type="file" accept="image/*" class="w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-white/10 file:text-white hover:file:bg-white/20">
+        <input id="place-review-image-url" type="url" placeholder="Или ссылка на фото" class="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-xl text-sm focus:border-sky-500 focus:outline-none">
+      </div>
+      <button onclick="submitPlaceReview('${jsString(key)}')" class="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 rounded-xl text-sm font-semibold">Опубликовать отзыв</button>
     </div>
     <div class="mt-5 border-t border-white/10 pt-4">
       <h3 class="font-semibold mb-3">💬 Отзывы (${reviews.length})</h3>
@@ -1463,10 +1400,6 @@ function renderPlaceReviewsBlock(key) {
 
 async function submitPlaceReview(key) {
   if (typeof refreshAuthState === 'function') { try { await refreshAuthState(); } catch {} }
-  if (typeof tpHasOwnReview === 'function' && tpHasOwnReview(loadPlaceReviews(key))) {
-    showToast('Вы уже оставили отзыв. Удалите его, чтобы написать новый.', 'error');
-    return;
-  }
   const ctx = window._currentPlaceReviewContext;
   const rating = window._placeReviewStarRating || 0;
   const text = (document.getElementById('place-review-text')?.value || '').trim();
@@ -1476,9 +1409,6 @@ async function submitPlaceReview(key) {
   catch (error) { showToast(error.message, 'error'); return; }
 
   const review = {
-    id: `local_${Date.now()}`,
-    _localUserId: (typeof tpGetCurrentReviewOwnerKey === 'function' ? tpGetCurrentReviewOwnerKey() : (window.travelplanCurrentUser?.id || 'guest')),
-    userId: window.travelplanCurrentUser?.id || '',
     author: typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость',
     avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
     rating,
@@ -1486,8 +1416,7 @@ async function submitPlaceReview(key) {
     imageUrl,
     date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
   };
-  try { await savePlaceReview(key, review, ctx?.city, ctx?.country, ctx?.placeName); }
-  catch (error) { showToast(error.message || 'Не удалось сохранить отзыв', 'error'); return; }
+  savePlaceReview(key, review, ctx?.city, ctx?.country, ctx?.placeName);
   if (ctx) openPlaceDetail(ctx.city, ctx.category, ctx.index);
   showToast('Отзыв опубликован');
 }
