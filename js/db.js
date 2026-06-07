@@ -48,40 +48,298 @@ async function dbGetReviews(entityType, entityId) {
     return [];
   }
 
-  return data || [];
+  return await tpHydrateReviewRowsWithProfileAvatars(data || []);
 }
 
-async function dbAddReview({ entityType, entityId, city, country, authorName, rating, comment, imageUrl }) {
+async function dbAddReview({ entityType, entityId, city, country, authorName, rating, comment, imageUrl, avatarUrl }) {
   if (!isSupabaseReady()) throw new Error('Supabase не подключён');
 
-  const { data, error } = await supabaseClient
+  const basePayload = {
+    entity_type: entityType,
+    entity_id: entityId,
+    city: city || null,
+    country: country || null,
+    user_id: window.travelplanCurrentUser?.id || null,
+    author_name: authorName,
+    rating: Number(rating),
+    comment: comment?.trim() || null,
+    image_url: imageUrl || null
+  };
+
+  // Если в таблице reviews есть колонка avatar_url, аватар сохраняется в Supabase
+  // и будет виден с другого аккаунта/браузера. Если колонки ещё нет, запрос
+  // мягко повторится без неё, чтобы публикация отзыва не падала перед защитой.
+  const payloadWithAvatar = {
+    ...basePayload,
+    avatar_url: avatarUrl || null
+  };
+
+  let { data, error } = await supabaseClient
     .from('reviews')
-    .insert({
-      entity_type: entityType,
-      entity_id: entityId,
-      city: city || null,
-      country: country || null,
-      user_id: window.travelplanCurrentUser?.id || null,
-      author_name: authorName,
-      rating: Number(rating),
-      comment: comment?.trim() || null,
-      image_url: imageUrl || null
-    })
+    .insert(payloadWithAvatar)
     .select()
     .single();
+
+  if (error && /avatar_url|schema cache|column/i.test(error.message || '')) {
+    ({ data, error } = await supabaseClient
+      .from('reviews')
+      .insert(basePayload)
+      .select()
+      .single());
+    if (data && avatarUrl) {
+      data.avatar_url = data.avatar_url || avatarUrl;
+      data.author_avatar_url = data.author_avatar_url || avatarUrl;
+    }
+  }
 
   if (error) {
     console.error('Ошибка добавления отзыва:', error.message);
     throw error;
   }
 
-  return data;
+  const cachedRow = data || { ...basePayload, avatar_url: avatarUrl || null, author_avatar_url: avatarUrl || null, created_at: new Date().toISOString() };
+  if (avatarUrl) {
+    cachedRow.avatar_url = cachedRow.avatar_url || avatarUrl;
+    cachedRow.author_avatar_url = cachedRow.author_avatar_url || avatarUrl;
+  }
+  tpAddReviewToCache(cachedRow);
+  return cachedRow;
 }
 
 function calcAverageRating(reviews) {
   if (!reviews || reviews.length === 0) return null;
   const sum = reviews.reduce((acc, item) => acc + Number(item.rating || 0), 0);
   return Math.round((sum / reviews.length) * 10) / 10;
+}
+
+async function tpHydrateReviewRowsWithProfileAvatars(rows = []) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return list;
+
+  // Без миграций Supabase: аватарка берётся из profiles по user_id.
+  // Если profiles закрыт RLS, хотя бы отзывы текущего пользователя получают аву
+  // из уже загруженного профиля. Ну хоть где-то хаос загнан в стойло.
+  const currentUserId = window.travelplanCurrentUser?.id || null;
+  const currentAvatar = window.travelplanUserProfile?.avatar_url
+    || window.travelplanCurrentUser?.user_metadata?.avatar_url
+    || '';
+
+  const withCurrentUserAvatar = list.map(row => {
+    const hasAvatar = row?.avatar_url || row?.author_avatar_url || row?.avatarUrl;
+    if (!hasAvatar && currentUserId && row?.user_id === currentUserId && currentAvatar) {
+      return { ...row, avatar_url: currentAvatar, author_avatar_url: currentAvatar };
+    }
+    return row;
+  });
+
+  if (!isSupabaseReady()) return withCurrentUserAvatar;
+
+  const missingAvatarUserIds = [...new Set(withCurrentUserAvatar
+    .filter(row => row?.user_id && !(row.avatar_url || row.author_avatar_url || row.avatarUrl))
+    .map(row => row.user_id))];
+
+  if (!missingAvatarUserIds.length) return withCurrentUserAvatar;
+
+  try {
+    const { data: profiles, error } = await supabaseClient
+      .from('profiles')
+      .select('id, avatar_url, display_name, nickname')
+      .in('id', missingAvatarUserIds);
+
+    if (error) {
+      console.warn('Не удалось подтянуть аватарки из profiles:', error.message);
+      return withCurrentUserAvatar;
+    }
+
+    const byId = new Map((profiles || []).map(profile => [profile.id, profile]));
+    return withCurrentUserAvatar.map(row => {
+      const profile = byId.get(row.user_id);
+      if (!profile?.avatar_url) return row;
+      return {
+        ...row,
+        avatar_url: row.avatar_url || profile.avatar_url,
+        author_avatar_url: row.author_avatar_url || profile.avatar_url,
+        author_name: row.author_name || profile.display_name || profile.nickname || 'Гость'
+      };
+    });
+  } catch (err) {
+    console.warn('Ошибка подтягивания аватарок отзывов:', err?.message || err);
+    return withCurrentUserAvatar;
+  }
+}
+
+
+// ── Reviews cache: синхронизация отзывов из Supabase со всем сайтом ───────
+
+function tpReviewToUiReview(row) {
+  if (!row) return null;
+  const created = row.created_at || row.updated_at || row.date || null;
+  let date = '';
+  try {
+    date = created
+      ? new Date(created).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+      : '';
+  } catch {
+    date = '';
+  }
+
+  return {
+    id: row.id,
+    author: row.author_name || row.author || 'Гость',
+    author_name: row.author_name || row.author || 'Гость',
+    rating: Number(row.rating || 0),
+    text: row.comment || row.text || '',
+    comment: row.comment || row.text || '',
+    imageUrl: row.image_url || row.imageUrl || '',
+    image_url: row.image_url || row.imageUrl || '',
+    avatarUrl: row.avatar_url || row.author_avatar_url || row.avatarUrl || '',
+    avatar_url: row.avatar_url || row.author_avatar_url || row.avatarUrl || '',
+    date,
+    created_at: created,
+    user_id: row.user_id || null,
+    entity_type: row.entity_type,
+    entity_id: row.entity_id,
+    city: row.city || null,
+    country: row.country || null,
+    _source: 'supabase'
+  };
+}
+
+function tpReviewCacheKey(entityType, entityId) {
+  return `${String(entityType || '').trim()}::${String(entityId || '').trim()}`;
+}
+
+function tpReviewCacheKeysForUi(ui) {
+  const keys = [tpReviewCacheKey(ui.entity_type, ui.entity_id)];
+  // Для направлений дополнительно кладём ключ по названию города,
+  // чтобы код мог найти отзыв и по id "shymkent", и по "Шымкент".
+  if (ui.entity_type === 'destination' && ui.city) keys.push(tpReviewCacheKey('destination', ui.city));
+  return [...new Set(keys)];
+}
+
+function tpReviewTimestamp(review) {
+  const raw = review?.created_at || review?.updated_at || review?.createdAt || review?.dateRaw || review?.date || '';
+  const time = Date.parse(raw);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function tpSortReviewsNewestFirst(reviews = []) {
+  return [...reviews].sort((a, b) => tpReviewTimestamp(b) - tpReviewTimestamp(a));
+}
+
+function tpReviewSemanticKey(review) {
+  const entityType = String(review?.entity_type || '').trim().toLowerCase();
+  const entityId = String(review?.entity_id || '').trim().toLowerCase();
+  const author = String(review?.author || review?.author_name || '').trim().toLowerCase();
+  const text = String(review?.text || review?.comment || '').trim().toLowerCase();
+  const rating = String(review?.rating || '').trim();
+  const rawDate = review?.created_at || review?.date || '';
+  let day = '';
+  const parsed = Date.parse(rawDate);
+  if (Number.isFinite(parsed)) day = new Date(parsed).toISOString().slice(0, 10);
+  else day = String(rawDate).trim().toLowerCase();
+  return `${entityType}::${entityId}::${author}::${rating}::${text}::${day}`;
+}
+
+function tpAddReviewToCache(row) {
+  const ui = tpReviewToUiReview(row);
+  if (!ui || !ui.entity_type || !ui.entity_id) return null;
+  if (!window.travelplanReviewsCache || typeof window.travelplanReviewsCache.get !== 'function') {
+    window.travelplanReviewsCache = new Map();
+  }
+  tpReviewCacheKeysForUi(ui).forEach(key => {
+    const current = window.travelplanReviewsCache.get(key) || [];
+    window.travelplanReviewsCache.set(key, tpMergeReviews([ui], current));
+  });
+  window.travelplanReviewsCacheLoaded = true;
+  window.travelplanReviewsCacheLoadedAt = Date.now();
+  return ui;
+}
+
+function tpSetReviewsCache(rows) {
+  const map = new Map();
+  (rows || []).forEach(row => {
+    const ui = tpReviewToUiReview(row);
+    if (!ui || !ui.entity_type || !ui.entity_id) return;
+
+    tpReviewCacheKeysForUi(ui).forEach(key => {
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(ui);
+    });
+  });
+
+  for (const [key, value] of map.entries()) map.set(key, tpMergeReviews([], value));
+  window.travelplanReviewsCache = map;
+  window.travelplanReviewsCacheLoaded = true;
+  window.travelplanReviewsCacheLoadedAt = Date.now();
+  return map;
+}
+
+async function dbLoadAllReviewsCache() {
+  if (!isSupabaseReady()) {
+    window.travelplanReviewsCache = new Map();
+    window.travelplanReviewsCacheLoaded = false;
+    return [];
+  }
+
+  const { data, error } = await supabaseClient
+    .from('reviews')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.warn('Не удалось загрузить отзывы из Supabase:', error.message);
+    window.travelplanReviewsCache = new Map();
+    window.travelplanReviewsCacheLoaded = false;
+    return [];
+  }
+
+  const hydrated = await tpHydrateReviewRowsWithProfileAvatars(data || []);
+  tpSetReviewsCache(hydrated);
+  return hydrated;
+}
+
+function dbGetCachedReviews(entityType, entityId) {
+  const map = window.travelplanReviewsCache;
+  if (!map || typeof map.get !== 'function') return [];
+  return map.get(tpReviewCacheKey(entityType, entityId)) || [];
+}
+
+function tpMergeReviews(localReviews = [], dbReviews = []) {
+  const result = [];
+  const byId = new Set();
+  const bySemantic = new Map();
+
+  // Сначала Supabase, потом localStorage. Если localStorage содержит старую копию того же
+  // отзыва, она не появится вторым дублем, но может добить аватарку, если в БД ещё нет avatar_url.
+  [...dbReviews, ...localReviews].forEach((review) => {
+    if (!review) return;
+    const idKey = review.id ? `id:${review.id}` : null;
+    const semKey = tpReviewSemanticKey(review);
+
+    if (idKey && byId.has(idKey)) return;
+    const existingIndex = bySemantic.get(semKey);
+    if (existingIndex !== undefined) {
+      const existing = result[existingIndex];
+      if (!existing.avatarUrl && (review.avatarUrl || review.avatar_url)) {
+        existing.avatarUrl = review.avatarUrl || review.avatar_url;
+        existing.avatar_url = review.avatarUrl || review.avatar_url;
+      }
+      if (!existing.imageUrl && (review.imageUrl || review.image_url)) {
+        existing.imageUrl = review.imageUrl || review.image_url;
+        existing.image_url = review.imageUrl || review.image_url;
+      }
+      if (!existing.id && review.id) existing.id = review.id;
+      if (!existing.created_at && review.created_at) existing.created_at = review.created_at;
+      return;
+    }
+
+    if (idKey) byId.add(idKey);
+    bySemantic.set(semKey, result.length);
+    result.push(review);
+  });
+
+  return tpSortReviewsNewestFirst(result);
 }
 
 // ── Bookings ───────────────────────────────────────────────────────────────
