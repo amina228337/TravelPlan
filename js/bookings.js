@@ -34,6 +34,42 @@ function getExpiredBadgeText(booking) {
   return booking?.type === 'hotel' ? 'Бронь завершилась' : 'Самолет улетел';
 }
 
+function bookingDateOnly(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function todayDateOnly() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+function isBookingExpiredByDate(booking) {
+  if (!booking) return false;
+  if (booking.status === 'expired') return true;
+
+  // Отель истекает после выезда, перелёт — после даты вылета.
+  // Раньше всё считалось по date_from, и отель начинал «умирать» уже в день заезда.
+  const rawDate = booking.type === 'hotel'
+    ? (booking.date_to || booking.date_from)
+    : booking.date_from;
+  const targetDate = bookingDateOnly(rawDate);
+  if (!targetDate) return false;
+  return targetDate < todayDateOnly();
+}
+
+function getActiveBookingCount(list = bookings) {
+  return (Array.isArray(list) ? list : []).filter(b => !isBookingExpiredByDate(b)).length;
+}
+
+function updateActiveRecordCount(list = bookings) {
+  recordCount = getActiveBookingCount(list);
+  return recordCount;
+}
+
 // Берем город назначения для картинки и подписи.
 // У перелета это город, куда летим, у отеля - город проживания.
 function getBookingTargetCity(booking) {
@@ -98,7 +134,7 @@ async function refreshBookingsFromSupabase() {
 
   if (typeof dbGetBookings !== 'function') {
     bookings = loadFromLocalStorage();
-    recordCount = bookings.length;
+    updateActiveRecordCount(bookings);
     renderBookings();
     return;
   }
@@ -106,13 +142,13 @@ async function refreshBookingsFromSupabase() {
   try {
     const remote = await dbGetBookings();
     bookings = remote;
-    recordCount = remote.length;
+    updateActiveRecordCount(remote);
     saveToLocalStorage(remote);
     renderBookings();
   } catch (error) {
     console.warn('Не удалось загрузить брони из Supabase:', error.message || error);
     bookings = loadFromLocalStorage();
-    recordCount = bookings.length;
+    updateActiveRecordCount(bookings);
     renderBookings();
   }
 }
@@ -140,8 +176,11 @@ async function addBooking(booking) {
     openAuthModal();
     return false;
   }
+
+  const storedBefore = loadFromLocalStorage();
+  updateActiveRecordCount(storedBefore);
   if (recordCount >= BOOKING_LIMIT) {
-    showToast(`Достигнут лимит в ${BOOKING_LIMIT} бронирований. Удалите старые.`, 'error');
+    showToast(`Достигнут лимит в ${BOOKING_LIMIT} активных бронирований. Истекшие можно оставить в истории или удалить вручную.`, 'error');
     return false;
   }
 
@@ -152,11 +191,11 @@ async function addBooking(booking) {
   booking.__backendId = booking.__backendId || booking.id || crypto.randomUUID?.() || String(Date.now());
   booking.__sync_status = 'pending';
 
-  const stored = loadFromLocalStorage();
+  const stored = storedBefore;
   stored.push(booking);
   saveToLocalStorage(stored);
   bookings = stored;
-  recordCount = stored.length;
+  updateActiveRecordCount(stored);
   renderBookings();
 
   if (window.dataSdk) {
@@ -211,7 +250,7 @@ async function removeBooking(id) {
   const stored = loadFromLocalStorage().filter(b => b.__backendId !== id);
   saveToLocalStorage(stored);
   bookings = bookings.filter(b => b.__backendId !== id);
-  recordCount = bookings.length;
+  updateActiveRecordCount(bookings);
   renderBookings();
   return true;
 }
@@ -238,28 +277,25 @@ async function markAsPaid(id) {
 
 
 function checkExpiredBookings() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   let changed = false;
 
   bookings.forEach(b => {
     if (b.status === 'expired') return;
-    const departDate = new Date(b.date_from);
-    if (Number.isNaN(departDate.getTime())) return;
-    departDate.setHours(0, 0, 0, 0);
-    if (departDate < today) {
+    if (isBookingExpiredByDate(b)) {
       b.status = 'expired';
       changed = true;
     }
   });
 
+  updateActiveRecordCount(bookings);
   if (changed) saveToLocalStorage(bookings);
 }
 
 
 function checkBookingLimit() {
+  updateActiveRecordCount(bookings);
   if (recordCount >= BOOKING_LIMIT) {
-    showToast(`Лимит: максимум ${BOOKING_LIMIT} бронирований. Удалите старые.`, 'error');
+    showToast(`Лимит: максимум ${BOOKING_LIMIT} активных бронирований. Истекшие в лимит не входят.`, 'error');
     return false;
   }
   return true;
@@ -436,7 +472,7 @@ function openBookingDetail(id) {
 
 function updateBookingCounter() {
   const counter = document.getElementById('booking-count');
-  if (counter) counter.textContent = recordCount;
+  if (counter) counter.textContent = getActiveBookingCount(bookings);
 }
 
 function renderBookings() {
@@ -455,8 +491,11 @@ function renderBookings() {
   emptyState.classList.add('hidden');
   bookingsList.classList.remove('hidden');
 
-  bookingsList.innerHTML = bookings.map(booking => {
-    const isExpired = booking.status === 'expired';
+  const activeBookings = bookings.filter(b => !isBookingExpiredByDate(b));
+  const expiredBookings = bookings.filter(b => isBookingExpiredByDate(b));
+
+  const renderBookingCard = (booking) => {
+    const isExpired = isBookingExpiredByDate(booking);
     const isPaid    = booking.payment_status === 'paid';
     const typeIcon  = booking.type === 'flight' ? '✈️' : '🏨';
     const isFlight  = booking.type === 'flight';
@@ -481,8 +520,6 @@ function renderBookings() {
         Оплатить
       </button>` : '';
 
-    // Изображение: для перелётов — город назначения, для отелей — название отеля + город
-    // Та же логика картинки, что и в модалке: город для перелета, отель для отеля.
     const bookingVisual = getBookingVisualImage(booking, 420, 320);
     const imgUrl = bookingVisual.src;
     const imgFallback = bookingVisual.fallback;
@@ -491,14 +528,12 @@ function renderBookings() {
       <div class="card-gradient rounded-xl p-4 ${isExpired ? 'opacity-60' : ''} cursor-pointer hover:ring-1 hover:ring-sky-500/30 transition"
            onclick="openBookingDetail('${booking.__backendId}')">
         <div class="flex items-start gap-4">
-          <!-- Миниатюра как в ленте -->
           <div class="w-20 h-20 rounded-xl overflow-hidden relative flex-shrink-0 border border-white/10">
             <img src="${imgUrl}" alt="${bookingVisual.title}" loading="lazy"
                  class="w-full h-full object-cover"
                  onerror="this.onerror=null;this.src='${imgFallback}'">
             <div class="absolute inset-0 bg-black/10"></div>
           </div>
-          <!-- Основная инфо -->
           <div class="flex-1 min-w-0">
             <div class="booking-content-inner">
               <div class="min-w-0 booking-main-info">
@@ -529,7 +564,17 @@ function renderBookings() {
           </div>
         </div>
       </div>`;
-  }).join('');
+  };
+
+  const activeHtml = activeBookings.length
+    ? `<div class="mb-3 flex items-center justify-between"><h3 class="text-lg font-bold">✅ Активные бронирования</h3><span class="text-xs text-slate-400">${activeBookings.length} / ${BOOKING_LIMIT}</span></div>${activeBookings.map(renderBookingCard).join('')}`
+    : `<div class="card-gradient rounded-xl p-5 text-center text-slate-400">Активных бронирований нет. Истекшие ниже не занимают лимит.</div>`;
+
+  const expiredHtml = expiredBookings.length
+    ? `<div class="mt-8 mb-3 flex items-center justify-between"><h3 class="text-lg font-bold text-slate-300">🕓 История / истекшие бронирования</h3><span class="text-xs text-slate-500">${expiredBookings.length} записей</span></div>${expiredBookings.map(renderBookingCard).join('')}`
+    : '';
+
+  bookingsList.innerHTML = `${activeHtml}${expiredHtml}`;
 }
 
 function payBooking(id) {
@@ -562,7 +607,7 @@ function requestDelete(id) {
 
 async function deleteBooking(id) {
   const ok = await removeBooking(id);
-  showToast(ok ? 'Бронирование отменено' : 'Ошибка при удалении', ok ? 'success' : 'error');
+  showToast(ok ? 'Бронирование удалено' : 'Ошибка при удалении', ok ? 'success' : 'error');
   closeDeleteConfirm();
 }
 
