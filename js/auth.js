@@ -480,6 +480,9 @@ async function saveProfile() {
       avatar_updated_at: avatarUpdatedAt
     });
     window.travelplanUserProfile = saved;
+    if (avatarUrl && typeof dbSyncCurrentUserReviewAvatar === 'function') {
+      dbSyncCurrentUserReviewAvatar(avatarUrl);
+    }
     const cityObj = (CITY_OPTIONS || []).find(c => c.name === cityName);
     if (cityObj && typeof setUserCity === 'function') setUserCity(cityObj);
     updateAuthUI();
