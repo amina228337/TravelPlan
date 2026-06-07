@@ -1318,14 +1318,48 @@ function getPlaceReviewKey(city, placeName) {
 }
 
 function loadPlaceReviews(key) {
+  let localReviews = [];
   try {
     const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    return all[key] || [];
-  } catch { return []; }
+    localReviews = all[key] || [];
+  } catch { localReviews = []; }
+
+  const dbReviews = typeof dbGetCachedReviews === 'function'
+    ? dbGetCachedReviews('place', key)
+    : [];
+
+  if (window.travelplanReviewsCacheLoaded) {
+    return typeof tpMergeReviews === 'function' ? tpMergeReviews([], dbReviews) : dbReviews;
+  }
+
+  return typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(localReviews, dbReviews)
+    : [...dbReviews, ...localReviews];
 }
 
-function savePlaceReview(key, review, city, country, placeName) {
+async function savePlaceReview(key, review, city, country, placeName) {
+  if (typeof dbAddReview === 'function') {
+    try {
+      await dbAddReview({
+        entityType: 'place',
+        entityId: key,
+        city,
+        country,
+        authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
+        rating: review.rating,
+        comment: review.text || null,
+        imageUrl: review.imageUrl || null,
+        avatarUrl: review.avatarUrl || (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : '')
+      });
+      // dbAddReview уже добавляет отзыв в общий кеш. Не перезагружаем кеш сразу,
+      // иначе свежая аватарка может потеряться, если profiles закрыт RLS.
+      return true;
+    } catch (err) {
+      console.warn('Отзыв места не ушёл в Supabase, сохраню локально:', err.message || err);
+    }
+  }
+
   try {
     const raw = localStorage.getItem(PLACE_REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
@@ -1333,18 +1367,7 @@ function savePlaceReview(key, review, city, country, placeName) {
     all[key].unshift(review);
     localStorage.setItem(PLACE_REVIEWS_KEY, JSON.stringify(all));
   } catch {}
-  if (typeof dbAddReview === 'function') {
-    dbAddReview({
-      entityType: 'place',
-      entityId: key,
-      city,
-      country,
-      authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
-      rating: review.rating,
-      comment: review.text || null,
-      imageUrl: review.imageUrl || null
-    }).catch(err => console.warn('Отзыв места сохранён локально, но не ушёл в Supabase:', err.message || err));
-  }
+  return false;
 }
 
 function renderPlaceReviewStars(rating) {
@@ -1414,9 +1437,10 @@ async function submitPlaceReview(key) {
     rating,
     text,
     imageUrl,
+    created_at: new Date().toISOString(),
     date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
   };
-  savePlaceReview(key, review, ctx?.city, ctx?.country, ctx?.placeName);
+  await savePlaceReview(key, review, ctx?.city, ctx?.country, ctx?.placeName);
   if (ctx) openPlaceDetail(ctx.city, ctx.category, ctx.index);
   showToast('Отзыв опубликован');
 }
