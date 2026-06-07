@@ -1148,12 +1148,18 @@ const TOP3_DESTINATIONS = ['dubai', 'istanbul', 'bangkok'];
 function getDestinationReviewStats(dest) {
   const byId = typeof loadReviews === 'function' ? loadReviews(dest.id) : [];
   const byCity = typeof loadReviews === 'function' ? loadReviews(dest.city) : [];
-  const reviewsMap = new Map();
-  [...byId, ...byCity].forEach((review, index) => {
-    const key = `${review.date || ''}_${review.author || ''}_${review.rating || ''}_${review.text || ''}_${index}`;
-    reviewsMap.set(key, review);
-  });
-  const reviews = [...reviewsMap.values()].filter(r => Number(r.rating) > 0);
+
+  // Один и тот же отзыв может лежать в кеше по двум ключам: destination::shymkent
+  // и destination::Шымкент. Раньше мы складывали оба массива и получали 12 отзывов
+  // вместо реальных 6. Да, JavaScript снова решил поиграть в бухгалтерию ада.
+  const merged = typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(byCity, byId)
+    : [...byId, ...byCity].filter((review, index, arr) => {
+        const key = `${review.id || ''}|${review.author || review.author_name || ''}|${review.rating || ''}|${review.text || review.comment || ''}|${review.created_at || review.date || ''}`;
+        return arr.findIndex(r => `${r.id || ''}|${r.author || r.author_name || ''}|${r.rating || ''}|${r.text || r.comment || ''}|${r.created_at || r.date || ''}` === key) === index;
+      });
+
+  const reviews = merged.filter(r => Number(r.rating) > 0);
   const count = reviews.length;
   const avg = count ? reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / count : 0;
   return { count, avg };
@@ -1271,14 +1277,51 @@ function renderPersonalSection() {
 const REVIEWS_KEY = 'travelplan_reviews';
 
 function loadReviews(cityId) {
+  let localReviews = [];
   try {
     const raw = localStorage.getItem(REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
-    return all[cityId] || [];
-  } catch { return []; }
+    localReviews = all[cityId] || [];
+  } catch { localReviews = []; }
+
+  const dbReviews = typeof dbGetCachedReviews === 'function'
+    ? dbGetCachedReviews('destination', cityId)
+    : [];
+
+  // Если Supabase-кэш успешно загружен, он главный источник. localStorage больше не
+  // подмешиваем, иначе старые отзывы из прошлого аккаунта начинают плодить фантомов.
+  if (window.travelplanReviewsCacheLoaded) {
+    return typeof tpMergeReviews === 'function' ? tpMergeReviews([], dbReviews) : dbReviews;
+  }
+
+  return typeof tpMergeReviews === 'function'
+    ? tpMergeReviews(localReviews, dbReviews)
+    : [...dbReviews, ...localReviews];
 }
 
-function saveReview(cityId, review) {
+async function saveReview(cityId, review) {
+  const dest = (typeof DESTINATIONS !== 'undefined') ? DESTINATIONS.find(d => d.id === cityId || d.city === cityId) : null;
+  if (typeof dbAddReview === 'function') {
+    try {
+      await dbAddReview({
+        entityType: 'destination',
+        entityId: cityId,
+        city: dest?.city || cityId,
+        country: dest?.country || null,
+        authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
+        rating: review.rating,
+        comment: review.text || null,
+        imageUrl: review.imageUrl || null,
+        avatarUrl: review.avatarUrl || (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : '')
+      });
+      // dbAddReview уже добавляет отзыв в общий кеш. Не перезагружаем кеш сразу,
+      // иначе свежая аватарка может потеряться, если profiles закрыт RLS.
+      return true;
+    } catch (err) {
+      console.warn('Отзыв не ушёл в Supabase, сохраню локально:', err.message || err);
+    }
+  }
+
   try {
     const raw = localStorage.getItem(REVIEWS_KEY);
     const all = raw ? JSON.parse(raw) : {};
@@ -1286,19 +1329,7 @@ function saveReview(cityId, review) {
     all[cityId].unshift(review);
     localStorage.setItem(REVIEWS_KEY, JSON.stringify(all));
   } catch {}
-  const dest = (typeof DESTINATIONS !== 'undefined') ? DESTINATIONS.find(d => d.id === cityId || d.city === cityId) : null;
-  if (typeof dbAddReview === 'function') {
-    dbAddReview({
-      entityType: 'destination',
-      entityId: cityId,
-      city: dest?.city || cityId,
-      country: dest?.country || null,
-      authorName: review.author || (typeof getReviewAuthorName === 'function' ? getReviewAuthorName() : 'Гость'),
-      rating: review.rating,
-      comment: review.text || null,
-      imageUrl: review.imageUrl || null
-    }).catch(err => console.warn('Отзыв сохранён локально, но не ушёл в Supabase:', err.message || err));
-  }
+  return false;
 }
 
 function renderStars(rating) {
@@ -1424,9 +1455,10 @@ async function submitReview(cityId) {
 
   const review = {
     author, rating, text, imageUrl, avatarUrl: (typeof getCurrentReviewAvatarValue === 'function' ? getCurrentReviewAvatarValue() : ''),
+    created_at: new Date().toISOString(),
     date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
   };
-  saveReview(cityId, review);
+  await saveReview(cityId, review);
   openCityModal(cityId); // перерисовать
   if (typeof renderFeed === 'function' && typeof getFilteredFeedItems === 'function' && typeof getFeedFilterState === 'function') {
     renderFeed(getFilteredFeedItems(getFeedFilterState()));
