@@ -443,12 +443,14 @@ function appBookingToDbBooking(booking) {
 
 function dbBookingToAppBooking(row) {
   const isFlight = row.booking_type === 'flight';
+  const isPaid = row.status === 'paid' || Boolean(row.paid_at);
   return {
     id: row.id,
     __backendId: row.id,
+    __sync_status: 'synced',
     type: isFlight ? 'flight' : 'hotel',
     status: row.status === 'expired' ? 'expired' : 'active',
-    payment_status: row.status === 'paid' ? 'paid' : 'pending',
+    payment_status: isPaid ? 'paid' : 'pending',
     paid_at: row.paid_at,
     departure: isFlight ? (row.airline || 'Рейс') : (row.hotel_name || 'Отель'),
     destination: isFlight ? `${row.city_from || ''} → ${row.city_to || ''}` : row.city_to,
@@ -489,9 +491,13 @@ async function dbCreateBooking(booking) {
 async function dbGetBookings() {
   if (!isSupabaseReady()) return [];
 
+  const user = getCurrentAuthUserSync();
+  if (!user?.id) return [];
+
   const { data, error } = await supabaseClient
     .from('bookings')
     .select('*')
+    .eq('user_id', user.id)
     .neq('status', 'cancelled')
     .order('created_at', { ascending: false });
 
