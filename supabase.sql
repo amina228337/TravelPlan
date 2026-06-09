@@ -1,8 +1,3 @@
--- =============================================
--- TravelPlan seed: all interesting places with descriptions
--- Run after supabase_setup.sql
--- =============================================
-
 -- Повторный запуск не плодит дубликаты:
 delete from public.places;
 
