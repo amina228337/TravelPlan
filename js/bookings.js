@@ -70,6 +70,64 @@ function updateActiveRecordCount(list = bookings) {
   return recordCount;
 }
 
+
+function getBookingStableKey(booking) {
+  if (!booking) return '';
+  const backend = booking.__backendId || booking.id || '';
+  if (backend && !String(backend).startsWith('tmp_')) return `id:${backend}`;
+  const type = String(booking.type || '').trim();
+  const destination = String(booking.destination || '').trim().toLowerCase();
+  const departure = String(booking.departure || booking.hotel_name || booking.airline || '').trim().toLowerCase();
+  const dateFrom = String(booking.date_from || '').slice(0, 10);
+  const dateTo = String(booking.date_to || '').slice(0, 10);
+  const price = String(booking.price || booking.total_price || 0);
+  return `semantic:${type}|${destination}|${departure}|${dateFrom}|${dateTo}|${price}`;
+}
+
+function mergeRemoteAndLocalBookings(remoteList = [], localList = []) {
+  const remote = Array.isArray(remoteList) ? remoteList : [];
+  const local = Array.isArray(localList) ? localList : [];
+  const result = [];
+  const used = new Set();
+
+  remote.forEach(item => {
+    if (!item) return;
+    const normalized = {
+      ...item,
+      __backendId: item.__backendId || item.id,
+      __sync_status: 'synced'
+    };
+    const idKey = normalized.__backendId ? `id:${normalized.__backendId}` : '';
+    const semanticKey = getBookingStableKey(normalized);
+    if (idKey) used.add(idKey);
+    if (semanticKey) used.add(semanticKey);
+    result.push(normalized);
+  });
+
+  local.forEach(item => {
+    if (!item) return;
+    const idKey = item.__backendId || item.id ? `id:${item.__backendId || item.id}` : '';
+    const semanticKey = getBookingStableKey(item);
+    const isAlreadyRemote = (idKey && used.has(idKey)) || (semanticKey && used.has(semanticKey));
+    if (isAlreadyRemote) return;
+
+    // Самое важное: pending/local брони нельзя выкидывать при refresh, иначе бронь
+    // появляется на секунду и пропадает, пока Supabase/RLS/интернет делают вид, что они важные.
+    const syncStatus = item.__sync_status || 'local';
+    if (syncStatus === 'pending' || syncStatus === 'local') {
+      result.push(item);
+      if (idKey) used.add(idKey);
+      if (semanticKey) used.add(semanticKey);
+    }
+  });
+
+  return result.sort((a, b) => {
+    const at = Date.parse(a.created_at || a.createdAt || a.date_from || 0) || 0;
+    const bt = Date.parse(b.created_at || b.createdAt || b.date_from || 0) || 0;
+    return bt - at;
+  });
+}
+
 // Берем город назначения для картинки и подписи.
 // У перелета это город, куда летим, у отеля - город проживания.
 function getBookingTargetCity(booking) {
@@ -141,9 +199,11 @@ async function refreshBookingsFromSupabase() {
 
   try {
     const remote = await dbGetBookings();
-    bookings = remote;
-    updateActiveRecordCount(remote);
-    saveToLocalStorage(remote);
+    const local = loadFromLocalStorage();
+    const merged = mergeRemoteAndLocalBookings(remote, local);
+    bookings = merged;
+    updateActiveRecordCount(merged);
+    saveToLocalStorage(merged);
     renderBookings();
   } catch (error) {
     console.warn('Не удалось загрузить брони из Supabase:', error.message || error);
@@ -185,10 +245,10 @@ async function addBooking(booking) {
   }
 
   // Главное правило для UI: бронь должна появляться сразу, а не ждать сеть.
-  // Supabase иногда отвечает не мгновенно, и раньше из-за этого кнопка выглядела
-  // так, будто по ней можно тыкать до пенсии. Поэтому сначала сохраняем локально,
-  // а синхронизацию с базой запускаем в фоне.
-  booking.__backendId = booking.__backendId || booking.id || crypto.randomUUID?.() || String(Date.now());
+  // Поэтому сначала сохраняем локально, а Supabase синхронизируем в фоне.
+  // tmp_ нужен, чтобы отличать временный id от настоящего id строки в базе.
+  booking.__backendId = booking.__backendId || booking.id || `tmp_${crypto.randomUUID?.() || Date.now()}`;
+  booking.created_at = booking.created_at || new Date().toISOString();
   booking.__sync_status = 'pending';
 
   const stored = storedBefore;
@@ -206,16 +266,19 @@ async function addBooking(booking) {
   }
 
   if (typeof dbCreateBooking === 'function') {
+    const localTempId = booking.__backendId;
     dbCreateBooking(booking).then(row => {
       if (!row?.id) return;
       const current = loadFromLocalStorage();
-      const item = current.find(b => b.__backendId === booking.__backendId);
+      const item = current.find(b => b.__backendId === localTempId);
       if (item) {
+        item.id = row.id;
         item.__backendId = row.id;
         item.__sync_status = 'synced';
+        item.created_at = item.created_at || row.created_at || new Date().toISOString();
         saveToLocalStorage(current);
       }
-      bookings = bookings.map(b => b.__backendId === booking.__backendId ? { ...b, __backendId: row.id, __sync_status: 'synced' } : b);
+      bookings = bookings.map(b => b.__backendId === localTempId ? { ...b, id: row.id, __backendId: row.id, __sync_status: 'synced', created_at: b.created_at || row.created_at } : b);
       renderBookings();
     }).catch(error => {
       console.warn('Бронь осталась локально, но не ушла в Supabase:', error.message || error);
