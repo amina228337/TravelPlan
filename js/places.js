@@ -985,12 +985,84 @@ const CITY_PLACES = {
 
 function getPlacesDestination(city) {
   if (typeof DESTINATIONS === 'undefined') return null;
-  return DESTINATIONS.find(d => d.city === city) || DESTINATIONS[0] || null;
+  return DESTINATIONS.find(d => d.city === city) || null;
 }
 
 function getPlacesCityList() {
-  if (typeof DESTINATIONS === 'undefined') return Object.keys(CITY_PLACES).sort();
-  return DESTINATIONS.map(d => d.city);
+  const fromStaticPlaces = Object.keys(CITY_PLACES || {});
+  const fromDestinations = typeof DESTINATIONS === 'undefined' ? [] : DESTINATIONS.map(d => d.city).filter(Boolean);
+  return [...new Set([...fromDestinations, ...fromStaticPlaces])].sort((a, b) => String(a).localeCompare(String(b), 'ru'));
+}
+
+let travelplanSupabasePlacesLoaded = false;
+let travelplanSupabasePlacesLoading = null;
+
+function normalizeDbPlaceCategory(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (['beauty', 'beautiful', 'beautiful_place', 'beautiful_places', 'nature', 'view', 'views', 'pretty'].includes(raw)) return 'beauty';
+  if (['attraction', 'attractions', 'sight', 'sights', 'landmark', 'landmarks', 'museum'].includes(raw)) return 'attractions';
+  // По умолчанию новые записи из базы кидаем в «Красивые места», чтобы они хотя бы не исчезали в цифровом болоте.
+  return 'beauty';
+}
+
+function normalizeDbPlaceRow(row) {
+  if (!row) return null;
+  const city = String(row.city || row.city_name || '').trim();
+  const name = String(row.name || row.title || row.place_name || '').trim();
+  if (!city || !name) return null;
+  const category = normalizeDbPlaceCategory(row.category || row.type || row.place_type);
+  const countryValue = row.country || row.country_code || '';
+  const countryName = PLACES_COUNTRY_NAMES[countryValue] || countryValue || '';
+  const location = row.location || row.address || row.full_address || `${name}, ${city}${countryName ? `, ${countryName}` : ''}`;
+  const rawPrice = row.price ?? row.entry_price ?? row.ticket_price ?? row.cost ?? null;
+  const priceNumber = Number(String(rawPrice ?? '').replace(/[^0-9.]/g, '')) || 0;
+  const priceLabel = row.price_label || row.entry_label || row.entry || (priceNumber ? `Вход: ${priceNumber.toLocaleString('ru-RU')} ₸` : 'Бесплатно');
+  return {
+    id: row.id || row.place_id || null,
+    name,
+    title: name,
+    location,
+    address: row.address || null,
+    photo: row.photo || row.image_url || row.photo_url || row.image || getPlacePhoto(name, city),
+    description: row.description || row.desc || null,
+    category,
+    country: countryName,
+    source: 'supabase',
+    entry: { price: priceNumber, label: priceLabel }
+  };
+}
+
+function addDbPlaceToCity(city, place) {
+  if (!city || !place?.name) return;
+  const category = normalizeDbPlaceCategory(place.category);
+  if (!CITY_PLACES[city]) CITY_PLACES[city] = { attractions: [], beauty: [] };
+  if (!Array.isArray(CITY_PLACES[city].attractions)) CITY_PLACES[city].attractions = [];
+  if (!Array.isArray(CITY_PLACES[city].beauty)) CITY_PLACES[city].beauty = [];
+  const list = CITY_PLACES[city][category];
+  const exists = list.some(item => String((typeof item === 'object' ? (item.name || item.title) : item) || '').trim().toLowerCase() === place.name.toLowerCase());
+  if (!exists) list.push(place);
+}
+
+async function loadSupabasePlacesIntoCityPlaces() {
+  if (travelplanSupabasePlacesLoaded) return;
+  if (travelplanSupabasePlacesLoading) return travelplanSupabasePlacesLoading;
+  travelplanSupabasePlacesLoading = (async () => {
+    try {
+      if (typeof dbGetPlaces !== 'function') return;
+      const rows = await dbGetPlaces();
+      (rows || []).forEach(row => {
+        const normalized = normalizeDbPlaceRow(row);
+        const city = String(row?.city || row?.city_name || '').trim();
+        if (normalized && city) addDbPlaceToCity(city, normalized);
+      });
+      travelplanSupabasePlacesLoaded = true;
+    } catch (error) {
+      console.warn('Места из Supabase не загрузились:', error?.message || error);
+    } finally {
+      travelplanSupabasePlacesLoading = null;
+    }
+  })();
+  return travelplanSupabasePlacesLoading;
 }
 
 function placeSlug(value) {
@@ -1119,15 +1191,18 @@ function makePlaceHistory(name, city, category) {
 
 function normalizePlaceItem(item, city, category) {
   const dest = getPlacesDestination(city);
-  const countryName = dest?.country && PLACES_COUNTRY_NAMES[dest.country] || '';
+  const countryName = (dest?.country && PLACES_COUNTRY_NAMES[dest.country]) || (typeof item === 'object' && item?.country) || '';
   if (typeof item === 'object' && item !== null) {
+    const name = item.name || item.title || item.place_name || 'Место';
+    const entry = item.entry || (typeof tpPlaceEntry === 'function' ? tpPlaceEntry(name, category) : { price: 0, label: 'Бесплатно' });
     return {
-      name: item.name || item.title || 'Место',
-      location: item.location || `${item.name || item.title || 'Место'}, ${city}, ${countryName}`,
-      photo: item.photo || getPlacePhoto(item.name || item.title || 'Место', city),
-      description: item.description || makePlaceDescription(item.name || item.title || 'Место', city, countryName, category),
-      category,
-      entry: typeof tpPlaceEntry === 'function' ? tpPlaceEntry(item.name || item.title || 'Место', category) : { price: 0, label: 'Бесплатно' }
+      id: item.id || null,
+      name,
+      location: item.location || item.address || item.full_address || `${name}, ${city}${countryName ? `, ${countryName}` : ''}`,
+      photo: item.photo || item.image_url || item.photo_url || item.image || getPlacePhoto(name, city),
+      description: item.description || item.desc || makePlaceDescription(name, city, countryName, category),
+      category: item.category || category,
+      entry
     };
   }
   return {
@@ -1141,8 +1216,9 @@ function normalizePlaceItem(item, city, category) {
 }
 
 function getPlaceItems(city, category) {
+  const normalizedCategory = normalizeDbPlaceCategory(category);
   const data = CITY_PLACES[city] || { attractions: [], beauty: [] };
-  return (data[category] || []).map(item => normalizePlaceItem(item, city, category));
+  return (data[normalizedCategory] || []).map(item => normalizePlaceItem(item, city, normalizedCategory));
 }
 
 
@@ -1540,7 +1616,8 @@ function renderPlacesSuggestions(query = '') {
   box.classList.remove('hidden');
 }
 
-function initPlaces() {
+async function initPlaces() {
+  await loadSupabasePlacesIntoCityPlaces();
   const forced = window.travelplanPlacesOpenedFromCity ? window.travelplanPlacesForcedCity : null;
   const city = forced && CITY_PLACES[forced] ? forced : null;
   window.travelplanPlacesOpenedFromCity = false;
